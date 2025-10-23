@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User, Counter } from '../types';
 import { UserIcon, SearchIcon, ArrowRightIcon } from './icons';
+import { getStorageValue } from '../api/apiClient';
 
 const countersForSale: Counter[] = [
     { id: 1, name: 'عداد 500 نقطة', points: 500, price: 75000, priceCurrency: 'points' },
@@ -12,7 +13,7 @@ const countersForSale: Counter[] = [
 
 interface GiftCounterProps {
     onBack: () => void;
-    onGift: (recipientId: string, counter: Counter) => { success: boolean; message: string };
+    onGift: (recipientId: string, counter: Counter) => Promise<{ success: boolean; message: string }>;
     allUsers: User[];
     currentUserPoints: number;
     currentUserJewels: number;
@@ -32,7 +33,7 @@ const GiftCounter: React.FC<GiftCounterProps> = ({ onBack, onGift, allUsers, cur
         setSuccessMessage('');
     };
 
-    const handleSearch = () => {
+    const handleSearch = async () => {
         setError('');
         setSuccessMessage('');
         setFoundUser(null);
@@ -45,33 +46,40 @@ const GiftCounter: React.FC<GiftCounterProps> = ({ onBack, onGift, allUsers, cur
         const user = allUsers.find(u => u.userId === recipientIdInput.trim());
         if (user) {
             const profilePictureKey = `profilePicture_${user.userId}`;
-            const storedValue = localStorage.getItem(profilePictureKey);
-            const profilePicture = storedValue ? JSON.parse(storedValue) : null;
-            setFoundUser({ ...user, profilePicture });
+            try {
+                const profilePicture = await getStorageValue<string | null>(profilePictureKey, null);
+                setFoundUser({ ...user, profilePicture });
+            } catch (fetchError) {
+                console.error('Failed to load recipient profile picture:', fetchError);
+                setFoundUser({ ...user, profilePicture: null });
+            }
         } else {
             setError('لم يتم العثور على مستخدم بهذا المعرّف.');
         }
     };
     
-    const handleGiftPurchase = (counter: Counter) => {
+    const handleGiftPurchase = async (counter: Counter) => {
         if (!foundUser) return;
         setIsLoading(true);
         setError('');
         setSuccessMessage('');
 
-        const result = onGift(foundUser.userId, counter);
-        
-        setTimeout(() => {
+        try {
+            const result = await onGift(foundUser.userId, counter);
             if (result.success) {
                 setSuccessMessage(result.message);
                 setTimeout(() => {
-                   setSuccessMessage('');
+                    setSuccessMessage('');
                 }, 3000);
             } else {
                 setError(result.message);
             }
+        } catch (error) {
+            console.error('Gift request failed:', error);
+            setError('حدث خطأ أثناء تنفيذ العملية. حاول مرة أخرى.');
+        } finally {
             setIsLoading(false);
-        }, 500); 
+        }
     };
     
     return (
@@ -100,11 +108,11 @@ const GiftCounter: React.FC<GiftCounterProps> = ({ onBack, onGift, allUsers, cur
                                 placeholder="أدخل معرّف المستخدم هنا..."
                                 value={recipientIdInput}
                                 onChange={(e) => setRecipientIdInput(e.target.value)}
-                                onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') { void handleSearch(); } }}
                                 className="flex-grow bg-transparent py-3 px-4 text-white placeholder-[#BEBEBE] focus:outline-none text-right"
                             />
                             <button
-                                onClick={handleSearch}
+                                onClick={() => { void handleSearch(); }}
                                 className="bg-gray-700/50 text-white p-3 hover:bg-gray-600 transition-colors flex-shrink-0 self-stretch"
                                 aria-label="بحث"
                             >
@@ -148,7 +156,7 @@ const GiftCounter: React.FC<GiftCounterProps> = ({ onBack, onGift, allUsers, cur
                                         <p className="font-semibold text-sm text-[#FFC107] mt-1">{counter.price.toLocaleString('de-DE')}</p>
                                     </div>
                                     <button 
-                                        onClick={() => handleGiftPurchase(counter)}
+                                        onClick={() => { void handleGiftPurchase(counter); }}
                                         disabled={!canAfford || isLoading}
                                         className="px-5 py-2 rounded-md text-sm font-bold bg-[#3E4147] text-white transition-colors hover:bg-gray-500 disabled:bg-gray-700/50 disabled:cursor-wait"
                                     >

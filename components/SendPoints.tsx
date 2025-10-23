@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { ArrowRightIcon, UserIcon, SearchIcon, UrukCoinIcon } from './icons';
+import { getStorageValue } from '../api/apiClient';
 
 interface SendPointsProps {
     onBack: () => void;
-    onSend: (recipientId: string, amount: number) => { success: boolean; message: string };
+    onSend: (recipientId: string, amount: number) => Promise<{ success: boolean; message: string }>;
     allUsers: User[];
     currentUserPoints: number;
 }
@@ -26,7 +27,7 @@ const SendPoints: React.FC<SendPointsProps> = ({ onBack, onSend, allUsers, curre
         setAmount('');
     };
 
-    const handleSearch = () => {
+    const handleSearch = async () => {
         setError('');
         setSuccessMessage('');
         setFoundUser(null);
@@ -38,15 +39,19 @@ const SendPoints: React.FC<SendPointsProps> = ({ onBack, onSend, allUsers, curre
         const user = allUsers.find(u => u.userId === recipientIdInput.trim());
         if (user) {
             const profilePictureKey = `profilePicture_${user.userId}`;
-            const storedValue = localStorage.getItem(profilePictureKey);
-            const profilePicture = storedValue ? JSON.parse(storedValue) : null;
-            setFoundUser({ ...user, profilePicture });
+            try {
+                const profilePicture = await getStorageValue<string | null>(profilePictureKey, null);
+                setFoundUser({ ...user, profilePicture });
+            } catch (fetchError) {
+                console.error('Failed to load profile picture for recipient:', fetchError);
+                setFoundUser({ ...user, profilePicture: null });
+            }
         } else {
             setError('لم يتم العثور على مستخدم بهذا المعرّف.');
         }
     };
     
-    const handleSend = () => {
+    const handleSend = async () => {
         if (!foundUser) return;
         setIsLoading(true);
         setError('');
@@ -59,20 +64,23 @@ const SendPoints: React.FC<SendPointsProps> = ({ onBack, onSend, allUsers, curre
             return;
         }
 
-        const result = onSend(foundUser.userId, pointsAmount);
-        
-        setTimeout(() => {
+        try {
+            const result = await onSend(foundUser.userId, pointsAmount);
             if (result.success) {
                 setSuccessMessage(result.message);
                 setAmount('');
-                 setTimeout(() => {
+                setTimeout(() => {
                     setSuccessMessage('');
-                 }, 3000);
+                }, 3000);
             } else {
                 setError(result.message);
             }
+        } catch (error) {
+            console.error('Point transfer failed:', error);
+            setError('حدث خطأ أثناء تنفيذ العملية. حاول مرة أخرى.');
+        } finally {
             setIsLoading(false);
-        }, 500); 
+        }
     };
     
     return (
@@ -101,11 +109,11 @@ const SendPoints: React.FC<SendPointsProps> = ({ onBack, onSend, allUsers, curre
                                 placeholder="أدخل معرّف المستخدم هنا..."
                                 value={recipientIdInput}
                                 onChange={(e) => setRecipientIdInput(e.target.value)}
-                                onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') { void handleSearch(); } }}
                                 className="flex-grow bg-transparent py-3 px-4 text-white placeholder-[#BEBEBE] focus:outline-none text-right"
                             />
                             <button
-                                onClick={handleSearch}
+                                onClick={() => { void handleSearch(); }}
                                 className="bg-gray-700/50 text-white p-3 hover:bg-gray-600 transition-colors flex-shrink-0 self-stretch"
                                 aria-label="بحث"
                             >
@@ -158,7 +166,7 @@ const SendPoints: React.FC<SendPointsProps> = ({ onBack, onSend, allUsers, curre
                     
                     {/* Button */}
                     <button 
-                        onClick={handleSend}
+                        onClick={() => { void handleSend(); }}
                         disabled={isLoading || !amount}
                         className="w-full py-4 rounded-lg font-bold text-xl transition-all duration-200 bg-[#947200] text-black shadow-md hover:bg-[#a98200] disabled:bg-[#947200]/50 disabled:cursor-wait"
                     >
