@@ -410,14 +410,6 @@ const App: React.FC = () => {
             return { success: false, message: 'ليس لديك جواهر كافية' };
         }
 
-        if (counter.priceCurrency === 'points') {
-            setPoints(p => p - counter.price);
-        } else {
-            setJewels(j => j - counter.price);
-        }
-
-        logTransaction('gift_counter', `إهداء ${counter.name} إلى ${recipient.name}`, counter.price, counter.priceCurrency, true);
-
         const recipientCountersKey = `userCounters_${recipient.userId}`;
         const recipientNotificationsKey = `notifications_${recipient.userId}`;
 
@@ -445,6 +437,14 @@ const App: React.FC = () => {
             return { success: false, message: 'حدث خطأ أثناء إرسال الهدية. حاول مرة أخرى.' };
         }
 
+        if (counter.priceCurrency === 'points') {
+            setPoints(p => p - counter.price);
+        } else {
+            setJewels(j => j - counter.price);
+        }
+
+        logTransaction('gift_counter', `إهداء ${counter.name} إلى ${recipient.name}`, counter.price, counter.priceCurrency, true);
+
         addNotification(`لقد أهديت ${recipient.name} (${counter.name}) بنجاح`, 'transactions');
         
         return { success: true, message: 'تم إرسال الهدية بنجاح!' };
@@ -466,12 +466,6 @@ const App: React.FC = () => {
             return { success: false, message: 'ليس لديك نقاط كافية' };
         }
 
-        // Deduct from sender
-        setPoints(p => p - amount);
-        logTransaction('send_points', `إرسال نقاط إلى ${recipient.name}`, amount, 'points', true);
-
-
-        // Add to recipient
         const recipientPointsKey = `points_${recipient.userId}`;
         const recipientNotificationsKey = `notifications_${recipient.userId}`;
         const timestamp = Date.now();
@@ -498,6 +492,10 @@ const App: React.FC = () => {
             console.error('Failed to transfer points to recipient:', error);
             return { success: false, message: 'حدث خطأ أثناء إرسال النقاط. حاول مرة أخرى.' };
         }
+
+        // Deduct from sender after recipient update succeeds
+        setPoints(p => p - amount);
+        logTransaction('send_points', `إرسال نقاط إلى ${recipient.name}`, amount, 'points', true);
 
         // Notify sender
         addNotification(`لقد أرسلت ${amount.toLocaleString('de-DE')} نقطة إلى ${recipient.name} بنجاح`, 'transactions');
