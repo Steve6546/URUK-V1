@@ -4,7 +4,7 @@ const getValue = async (req, res, next) => {
   try {
     const { key } = req.params;
     const entry = await storageService.getValue(key);
-    if (!entry) {
+    if (typeof entry === 'undefined') {
       return res.status(404).json({ error: 'Key not found' });
     }
     return res.json(entry);

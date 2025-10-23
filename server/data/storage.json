@@ -1,1 +1,10 @@
-{}
+{
+  "users": [],
+  "notifications": [],
+  "lotteryParticipants": [],
+  "chatMessages": [],
+  "chatRooms": [],
+  "userCounters": [],
+  "purchaseHistory": [],
+  "lotteryHistory": []
+}
