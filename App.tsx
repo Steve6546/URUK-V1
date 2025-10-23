@@ -22,6 +22,7 @@ import JewelsStore from './components/JewelsStore';
 import PurchaseHistory from './components/PurchaseHistory';
 import { Counter, Notification, User, ChatRoom, ChatMessage, LotteryResult, Transaction } from './types';
 import { UserIcon, UsersIcon, ArrowLeftIcon, ArrowRightIcon, CameraIcon, PencilIcon, PhoneIcon, MailIcon, ReferralIcon, CheckIcon, LockIcon, ShieldCheckIcon, DocumentIcon, BellIcon, HeadsetIcon, ExitIcon, LogoutIcon, IdIcon, XIcon, ShieldExclamationIcon, ClockIcon, GamesIcon, WithdrawIcon, ChatIcon, CopyIcon } from './components/icons';
+import { getStorageValue, setStorageValue } from './api/apiClient';
 
 const COUNTER_COST = 1000;
 const COOLDOWN_PERIOD = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
@@ -164,74 +165,106 @@ const App: React.FC = () => {
 
     // Lottery Winner Effect
     useEffect(() => {
-        if (lotteryParticipants.length >= 500) {
+        if (lotteryParticipants.length < 500) {
+            return;
+        }
+
+        let isMounted = true;
+
+        const resolveLottery = async () => {
             const winnerId = lotteryParticipants[Math.floor(Math.random() * lotteryParticipants.length)];
             const winner = allUsers.find(u => u.userId === winnerId);
 
-            if (winner) {
-                // Award prize to winner
-                const winnerDollarsKey = `dollars_${winner.userId}`;
-                const storedDollars = localStorage.getItem(winnerDollarsKey);
-                const winnerDollars: number = storedDollars ? JSON.parse(storedDollars) : 0;
-                localStorage.setItem(winnerDollarsKey, JSON.stringify(winnerDollars + lotteryPot));
+            if (!winner) {
+                return;
+            }
 
-                // Notify winner
-                const winnerNotificationsKey = `notifications_${winner.userId}`;
-                const storedNotifications = localStorage.getItem(winnerNotificationsKey);
-                const winnerNotifications: Notification[] = storedNotifications ? JSON.parse(storedNotifications) : [];
-                const newNotification: Notification = {
+            const timestamp = Date.now();
+            const winnerDollarsKey = `dollars_${winner.userId}`;
+            const winnerNotificationsKey = `notifications_${winner.userId}`;
+            const winnerTransactionsKey = `purchaseHistory_${winner.userId}`;
+
+            try {
+                const [winnerDollars, winnerNotifications, winnerTransactions] = await Promise.all([
+                    getStorageValue<number>(winnerDollarsKey, 0),
+                    getStorageValue<Notification[]>(winnerNotificationsKey, []),
+                    getStorageValue<Transaction[]>(winnerTransactionsKey, []),
+                ]);
+
+                const winnerNotification: Notification = {
                     id: new Date().toISOString() + Math.random(),
                     message: `تهانينا! لقد فزت بـ ${lotteryPrizeName} في القرعة الكبرى وربحت ${lotteryPot.toLocaleString('de-DE')}$!`,
-                    timestamp: Date.now(),
+                    timestamp,
                     read: false,
                     category: 'games',
                 };
-                localStorage.setItem(winnerNotificationsKey, JSON.stringify([newNotification, ...winnerNotifications]));
 
-                 // Log transaction for winner
-                const winnerTransactionsKey = `purchaseHistory_${winner.userId}`;
-                const storedTransactions = localStorage.getItem(winnerTransactionsKey);
-                const winnerTransactions: Transaction[] = storedTransactions ? JSON.parse(storedTransactions) : [];
-                const newTransaction: Transaction = {
+                const winnerTransaction: Transaction = {
                     id: new Date().toISOString() + Math.random(),
                     type: 'lottery_win',
                     description: `الفوز بالقرعة: ${lotteryPrizeName}`,
                     amount: lotteryPot,
                     currency: 'dollars',
-                    timestamp: Date.now(),
+                    timestamp,
                     isDebit: false,
                 };
-                localStorage.setItem(winnerTransactionsKey, JSON.stringify([newTransaction, ...winnerTransactions]));
 
+                await Promise.all([
+                    setStorageValue(winnerDollarsKey, winnerDollars + lotteryPot),
+                    setStorageValue(winnerNotificationsKey, [winnerNotification, ...winnerNotifications]),
+                    setStorageValue(winnerTransactionsKey, [winnerTransaction, ...winnerTransactions]),
+                ]);
 
-                // Add to history
+                if (!isMounted) {
+                    return;
+                }
+
                 const newResult: LotteryResult = {
                     winnerId: winner.userId,
                     winnerName: winner.name,
                     prizeName: lotteryPrizeName,
                     pot: lotteryPot,
-                    timestamp: Date.now(),
+                    timestamp,
                 };
                 setLotteryHistory(prev => [newResult, ...prev]);
 
-                // Notify current user if they are not the winner
                 if (currentUser?.userId !== winner.userId) {
                     addNotification(`انتهت القرعة على ${lotteryPrizeName}! الفائز هو ${winner.name} وقد ربح ${lotteryPot.toLocaleString('de-DE')}$.`, 'games');
                 }
+            } catch (error) {
+                console.error('Failed to resolve lottery winner:', error);
+            } finally {
+                if (!isMounted) {
+                    return;
+                }
+                setLotteryPot(0);
+                setLotteryParticipants([]);
+                const currentPrizeIndex = lotteryPrizes.findIndex(p => p.name === lotteryPrizeName);
+                const nextPrize = lotteryPrizes[(currentPrizeIndex + 1) % lotteryPrizes.length];
+                setLotteryPrizeName(nextPrize.name);
+                setLotteryPrizeDescription(nextPrize.description);
+                setLotteryPrizeImage(nextPrize.image);
             }
-            
-            // Reset lottery for next round
-            setLotteryPot(0);
-            setLotteryParticipants([]);
-            
-            // Set up next prize
-            const currentPrizeIndex = lotteryPrizes.findIndex(p => p.name === lotteryPrizeName);
-            const nextPrize = lotteryPrizes[(currentPrizeIndex + 1) % lotteryPrizes.length];
-            setLotteryPrizeName(nextPrize.name);
-            setLotteryPrizeDescription(nextPrize.description);
-            setLotteryPrizeImage(nextPrize.image);
-        }
-    }, [lotteryParticipants.length]);
+        };
+
+        void resolveLottery();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [
+        lotteryParticipants,
+        allUsers,
+        lotteryPot,
+        lotteryPrizeName,
+        currentUser?.userId,
+        setLotteryHistory,
+        setLotteryPot,
+        setLotteryParticipants,
+        setLotteryPrizeName,
+        setLotteryPrizeDescription,
+        setLotteryPrizeImage
+    ]);
 
 
     const pointRewardPerCycle = userCounters.reduce((sum, counter) => sum + (counter.points || 0), BASE_POINT_REWARD_PER_CYCLE);
@@ -361,7 +394,7 @@ const App: React.FC = () => {
     };
 
 
-    const handleGiftCounter = (recipientId: string, counter: Counter): { success: boolean; message: string } => {
+    const handleGiftCounter = async (recipientId: string, counter: Counter): Promise<{ success: boolean; message: string }> => {
         const recipient = allUsers.find(u => u.userId === recipientId);
 
         if (!recipient) {
@@ -377,6 +410,33 @@ const App: React.FC = () => {
             return { success: false, message: 'ليس لديك جواهر كافية' };
         }
 
+        const recipientCountersKey = `userCounters_${recipient.userId}`;
+        const recipientNotificationsKey = `notifications_${recipient.userId}`;
+
+        const timestamp = Date.now();
+        const notification: Notification = {
+            id: new Date().toISOString() + Math.random(),
+            message: `لقد تلقيت هدية! أهداك ${currentUser!.name} (${counter.name})`,
+            timestamp,
+            read: false,
+            category: 'transactions',
+        };
+
+        try {
+            const [recipientCounters, recipientNotifications] = await Promise.all([
+                getStorageValue<Counter[]>(recipientCountersKey, []),
+                getStorageValue<Notification[]>(recipientNotificationsKey, []),
+            ]);
+
+            await Promise.all([
+                setStorageValue(recipientCountersKey, [...recipientCounters, counter]),
+                setStorageValue(recipientNotificationsKey, [notification, ...recipientNotifications]),
+            ]);
+        } catch (error) {
+            console.error('Failed to process gifted counter:', error);
+            return { success: false, message: 'حدث خطأ أثناء إرسال الهدية. حاول مرة أخرى.' };
+        }
+
         if (counter.priceCurrency === 'points') {
             setPoints(p => p - counter.price);
         } else {
@@ -385,29 +445,12 @@ const App: React.FC = () => {
 
         logTransaction('gift_counter', `إهداء ${counter.name} إلى ${recipient.name}`, counter.price, counter.priceCurrency, true);
 
-        const recipientCountersKey = `userCounters_${recipient.userId}`;
-        const storedCounters = localStorage.getItem(recipientCountersKey);
-        const recipientCounters: Counter[] = storedCounters ? JSON.parse(storedCounters) : [];
-        localStorage.setItem(recipientCountersKey, JSON.stringify([...recipientCounters, counter]));
-
-        const recipientNotificationsKey = `notifications_${recipient.userId}`;
-        const storedNotifications = localStorage.getItem(recipientNotificationsKey);
-        const recipientNotifications: Notification[] = storedNotifications ? JSON.parse(storedNotifications) : [];
-        const newNotification: Notification = {
-            id: new Date().toISOString() + Math.random(),
-            message: `لقد تلقيت هدية! أهداك ${currentUser!.name} (${counter.name})`,
-            timestamp: Date.now(),
-            read: false,
-            category: 'transactions',
-        };
-        localStorage.setItem(recipientNotificationsKey, JSON.stringify([newNotification, ...recipientNotifications]));
-
         addNotification(`لقد أهديت ${recipient.name} (${counter.name}) بنجاح`, 'transactions');
         
         return { success: true, message: 'تم إرسال الهدية بنجاح!' };
     };
 
-    const handleSendPoints = (recipientId: string, amount: number): { success: boolean; message: string } => {
+    const handleSendPoints = async (recipientId: string, amount: number): Promise<{ success: boolean; message: string }> => {
         const recipient = allUsers.find(u => u.userId === recipientId);
 
         if (!recipient) {
@@ -423,29 +466,36 @@ const App: React.FC = () => {
             return { success: false, message: 'ليس لديك نقاط كافية' };
         }
 
-        // Deduct from sender
-        setPoints(p => p - amount);
-        logTransaction('send_points', `إرسال نقاط إلى ${recipient.name}`, amount, 'points', true);
-
-
-        // Add to recipient
         const recipientPointsKey = `points_${recipient.userId}`;
-        const storedPoints = localStorage.getItem(recipientPointsKey);
-        const recipientPoints: number = storedPoints ? JSON.parse(storedPoints) : 0;
-        localStorage.setItem(recipientPointsKey, JSON.stringify(recipientPoints + amount));
-
-        // Notify recipient
         const recipientNotificationsKey = `notifications_${recipient.userId}`;
-        const storedNotifications = localStorage.getItem(recipientNotificationsKey);
-        const recipientNotifications: Notification[] = storedNotifications ? JSON.parse(storedNotifications) : [];
-        const newNotification: Notification = {
+        const timestamp = Date.now();
+
+        const recipientNotification: Notification = {
             id: new Date().toISOString() + Math.random(),
             message: `لقد تلقيت هدية! أرسل لك ${currentUser!.name} ${amount.toLocaleString('de-DE')} نقطة`,
-            timestamp: Date.now(),
+            timestamp,
             read: false,
             category: 'transactions',
         };
-        localStorage.setItem(recipientNotificationsKey, JSON.stringify([newNotification, ...recipientNotifications]));
+
+        try {
+            const [recipientPoints, recipientNotifications] = await Promise.all([
+                getStorageValue<number>(recipientPointsKey, 0),
+                getStorageValue<Notification[]>(recipientNotificationsKey, []),
+            ]);
+
+            await Promise.all([
+                setStorageValue(recipientPointsKey, recipientPoints + amount),
+                setStorageValue(recipientNotificationsKey, [recipientNotification, ...recipientNotifications]),
+            ]);
+        } catch (error) {
+            console.error('Failed to transfer points to recipient:', error);
+            return { success: false, message: 'حدث خطأ أثناء إرسال النقاط. حاول مرة أخرى.' };
+        }
+
+        // Deduct from sender after recipient update succeeds
+        setPoints(p => p - amount);
+        logTransaction('send_points', `إرسال نقاط إلى ${recipient.name}`, amount, 'points', true);
 
         // Notify sender
         addNotification(`لقد أرسلت ${amount.toLocaleString('de-DE')} نقطة إلى ${recipient.name} بنجاح`, 'transactions');

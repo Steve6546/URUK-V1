@@ -1,76 +1,127 @@
 /**
- * هذا الملف هو نقطة البداية لتحديد كيفية تواصل الواجهة الأمامية مع الخادم.
- * عند بناء الواجهة الخلفية، سيتم استبدال كل استدعاءات localStorage باستدعاءات API من هنا.
- * 
- * This file is the starting point for defining how the frontend communicates with the backend.
- * When building the backend, all localStorage calls will be replaced by API calls from here.
+ * Centralized HTTP client for the URUK frontend to communicate with the backend.
+ * All network calls should go through these helper functions.
  */
 
-// في مشروع حقيقي، ستستخدم مكتبة مثل 'axios' لتسهيل طلبات HTTP.
-// In a real project, you would use a library like 'axios' for easier HTTP requests.
-// import axios from 'axios';
+const API_BASE_URL =
+  (typeof import.meta !== 'undefined' &&
+    import.meta.env &&
+    import.meta.env.VITE_API_BASE_URL) ||
+  'http://localhost:3001/api';
 
-const API_BASE_URL = 'http://localhost:3001/api'; // مثال على عنوان الخادم المحلي
+type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
-/**
- * مثال على دالة لجلب بيانات المستخدم الحالي من الخادم.
- * ستحتاج إلى تمرير توكن المصادقة (JWT).
- * 
- * Example function to fetch the current user's data from the server.
- * You would need to pass an authentication token (JWT).
- */
-export const getCurrentUser = async (token: string) => {
-    /*
-    const response = await fetch(`${API_BASE_URL}/users/me`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-        }
-    });
-
-    if (!response.ok) {
-        // إذا فشل الطلب، تعامل مع الخطأ هنا
-        // (مثلاً، إذا انتهت صلاحية التوكن، قم بتسجيل خروج المستخدم)
-        throw new Error('Failed to fetch user data');
-    }
-
-    return response.json();
-    */
-
-    // بيانات مؤقتة لأغراض العرض والتطوير
-    console.log("Fetching user with token:", token);
-    return Promise.resolve({ 
-        name: "Placeholder User", 
-        email: "user@example.com",
-        points: 1000,
-        jewels: 50
-    });
-};
-
-/**
- * مثال على دالة لتسجيل الدخول.
- * @returns {Promise<{token: string}>}
- */
-export const loginUser = async (credentials: { email?: string, phone?: string, password?: string }) => {
-    /*
-    const response = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials)
-    });
-    if (!response.ok) {
-        throw new Error('Login failed');
-    }
-    return response.json(); // should return { token: "..." }
-    */
-    console.log("Logging in with:", credentials);
-    return Promise.resolve({ token: "fake-jwt-token" });
+interface RequestOptions<TBody = unknown> {
+  method?: HttpMethod;
+  body?: TBody;
+  headers?: Record<string, string>;
+  signal?: AbortSignal;
 }
 
-// يمكنك إضافة المزيد من دوال الـ API هنا، مثل:
-// - registerUser
-// - buyCounter
-// - activateCounter
-// - giftCounter
-// - createChatRoom
-// - fetchMessagesForRoom
+interface StorageEntry<T = unknown> {
+  value: T;
+  updatedAt: string;
+}
+
+const defaultHeaders = {
+  'Content-Type': 'application/json',
+};
+
+async function request<TResponse = unknown, TBody = unknown>(
+  path: string,
+  options: RequestOptions<TBody> = {}
+): Promise<TResponse> {
+  const url = `${API_BASE_URL}${path}`;
+  const { method = 'GET', body, headers = {}, signal } = options;
+
+  const response = await fetch(url, {
+    method,
+    headers: { ...defaultHeaders, ...headers },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal,
+    credentials: 'include',
+  });
+
+  if (response.status === 204) {
+    return undefined as TResponse;
+  }
+
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : undefined;
+
+  if (!response.ok) {
+    const errorMessage =
+      (data && (data.error || data.message)) ||
+      `Request failed with status ${response.status}`;
+    throw new Error(errorMessage);
+  }
+
+  return data as TResponse;
+}
+
+export async function getStorageValue<T>(
+  key: string,
+  defaultValue: T
+): Promise<T> {
+  try {
+    const entry = await request<StorageEntry<T>>(
+      `/storage/${encodeURIComponent(key)}`
+    );
+    if (entry && typeof entry.value !== 'undefined') {
+      return entry.value;
+    }
+    return defaultValue;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('404')) {
+      return defaultValue;
+    }
+    console.error(`Failed to retrieve storage key ${key}:`, error);
+    throw error;
+  }
+}
+
+export async function setStorageValue<T>(
+  key: string,
+  value: T
+): Promise<StorageEntry<T>> {
+  return request<StorageEntry<T>, { value: T }>(
+    `/storage/${encodeURIComponent(key)}`,
+    {
+      method: 'PUT',
+      body: { value },
+    }
+  );
+}
+
+export async function deleteStorageValue(key: string): Promise<void> {
+  await request<void>(`/storage/${encodeURIComponent(key)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function bulkGetStorageValues(
+  keys: string[]
+): Promise<Record<string, StorageEntry>> {
+  if (!keys.length) {
+    return {};
+  }
+  return request<Record<string, StorageEntry>, { keys: string[] }>(
+    '/storage/bulk',
+    {
+      method: 'POST',
+      body: { keys },
+    }
+  );
+}
+
+export async function pingApi(): Promise<boolean> {
+  try {
+    await request('/test');
+    return true;
+  } catch (error) {
+    console.error('Failed to reach backend:', error);
+    return false;
+  }
+}
+
+export { API_BASE_URL };
