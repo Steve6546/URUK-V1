@@ -1,66 +1,48 @@
-# 3. إدارة الحالة (State Management)
+# 03 – State Management Strategy
 
-إدارة الحالة هي الطريقة التي يتم بها تخزين البيانات وتحديثها ومشاركتها عبر مكونات التطبيق.
+URUK relies on React hooks and a single persistence abstraction to keep the frontend and backend in sync. This document spells out how state flows across the app.
 
-## النهج الحالي (بدون خادم)
+## Guiding Principles
+1. **Single source of truth** – All user-facing data ultimately lives in the backend storage JSON file.
+2. **Local-first UX** – Changes appear immediately in the UI, then sync to the backend in the background.
+3. **Fault tolerance** – Missing keys or transient network issues should not crash the UI. Default values keep components stable.
 
-في هذا المشروع، نعتمد على آليات React المدمجة وهوك مخصص.
-1.  **حالة مركزية** في المكون الرئيسي `App.tsx`.
-2.  **تمرير الخصائص (Props Drilling)** لمشاركة الحالة والوظائف مع المكونات الفرعية.
-3.  **هوك `useLocalStorage`** للحفاظ على الحالة بين جلسات المتصفح.
+## Core Hook: `useLocalStorage`
 
----
+Located at `hooks/useLocalStorage.ts`, this hook wraps a React state value with three behaviours:
+1. **Initial load** – On mount it calls `getStorageValue(key, defaultValue)` from `apiClient`. If the backend returns `404` or `null`, the default is used and persisted.
+2. **Optimistic updates** – Updates the React state immediately, then sends `setStorageValue` asynchronously.
+3. **Reset** – The `clearValue` callback removes the key via `deleteStorageValue` and resets the local state to its default.
 
-## 1. الحالة المركزية في `App.tsx`
+The hook keeps track of `isLoaded` to avoid double-saving during the initial fetch.
 
-المكون `App.tsx` يعمل كـ "مصدر الحقيقة الوحيد" (Single Source of Truth) لمعظم بيانات التطبيق الهامة.
+## Namespacing Keys
+`App.tsx` defines two helpers:
+- `userDataKey(key)` – prefixes keys with the current `userId` (e.g. `points_12345`), isolating per-user data.
+- `globalDataKey(key)` – returns raw keys for shared resources like `chatRooms`.
 
-```typescript
-// داخل App.tsx
-const [currentUser, setCurrentUser] = useLocalStorage<User | null>('currentUser', null);
-const [points, setPoints] = useLocalStorage<number>(userDataKey('points'), 0);
-// ... باقي الحالات
-```
-- **لماذا؟**: تجميع الحالة في مكان واحد يسهل تتبع البيانات وفهم تدفقها.
+This pattern ensures features such as counters, notifications, and purchase history do not bleed across accounts.
 
----
+## React State Usage
+- Top-level booleans (e.g. `showChat`, `showStore`) control the visible section.
+- Derived values such as `unreadCount` are computed from persisted arrays (notifications) each render.
+- `useRef` is used for timers (connection toast), active DOM references, and storing the latest keys.
 
-## 2. تمرير الخصائص (Props Drilling)
+## Handling Connectivity
+`App.tsx` polls `pingApi` every seven seconds:
+- Updates `isConnected` state.
+- Triggers a toast message when connectivity changes.
+- Guards against stale intervals by clearing timers on unmount.
 
-بما أن الحالة موجودة في `App.tsx`، فإن الطريقة الوحيدة لوصول المكونات الفرعية إليها هي عن طريق تمريرها كـ `props`.
+Components that depend on critical data can watch `isConnected` to disable actions when the backend is offline.
 
-- **مثال**: مكون `Header.tsx` يحتاج إلى عرض عدد النقاط. في `App.tsx`، يتم تمريرها بهذا الشكل:
-  ```jsx
-  // في App.tsx
-  <Header 
-      points={points} 
-      // ... props أخرى
-  />
-  ```
+## Storage Shapes
+- Every stored key resolves to `{ value, updatedAt }`.
+- Default arrays exist for keys like `users`, `chatRooms`, `chatMessages`, `notifications`, `lottery*`, `userCounters`, and `purchaseHistory`.
+- Custom keys (e.g. `profileName_<userId>`) are created on demand.
 
----
+## Error Handling
+- Failures inside `useLocalStorage` are logged to the console but do not break rendering.
+- The API client throws a typed `HttpError`, giving access to the HTTP status for finer-grained handling if needed.
 
-## 3. الهوك المخصص `useLocalStorage`
-
-هذا الهوك هو ما يجعل التطبيق "يتذكر" تقدم المستخدم بين الجلسات بدون الحاجة إلى خادم. عند الانتقال إلى بنية حقيقية، سيتم استبدال استخدامه.
-
----
-
-## 4. إدارة الحالة في تطبيق متصل بخادم (الخطوة التالية)
-
-عند ربط التطبيق بواجهة خلفية (Backend)، تتغير طبيعة إدارة الحالة بشكل كبير. البيانات لم تعد مخزنة محليًا فقط، بل أصبحت "حالة خادم" (Server State) يجب جلبها وتحديثها ومزامنتها.
-
-### تحديات حالة الخادم:
-- **الجلب (Fetching)**: كيف ومتى نطلب البيانات من الخادم؟
-- **التخزين المؤقت (Caching)**: كيف نخزن البيانات محليًا لتجنب الطلبات المتكررة وتقليل التحميل؟
-- **المزامنة (Synchronization)**: كيف نضمن أن البيانات المعروضة للمستخدم هي أحدث نسخة من الخادم؟
-- **التعامل مع الأخطاء وحالات التحميل**.
-
-### الحلول المقترحة:
-بدلاً من استخدام `useState` و `useEffect` يدويًا لكل طلب API، من الأفضل استخدام مكتبات متخصصة لإدارة حالة الخادم. أشهرها:
-
-- **React Query (الآن TanStack Query)**: هي الخيار الأكثر شيوعًا وقوة. توفر Hooks جاهزة (`useQuery`, `useMutation`) تتعامل تلقائيًا مع الجلب، التخزين المؤقت، التحديث في الخلفية، إعادة المحاولة عند الفشل، والمزيد. هذا يقلل بشكل كبير من كمية الكود الذي تحتاجه.
-- **SWR**: مكتبة مشابهة من Vercel، تركز على البساطة والسرعة.
-- **Redux Toolkit (مع RTK Query)**: إذا كان تطبيقك يحتاج إلى إدارة حالة عميل معقدة (Client State) بالإضافة إلى حالة الخادم، فإن Redux Toolkit مع RTK Query يوفر حلاً متكاملاً.
-
-**الخلاصة**: عند بناء الواجهة الخلفية، الخطوة التالية في الواجهة الأمامية هي دمج مكتبة مثل **React Query** لإدارة التفاعل مع الـ API بكفاءة. هذا سيجعل الكود أنظف وأكثر قوة وقابلية للتوسع.
+This setup keeps code simple: components only import the hook and interact with plain React state, while the hook abstracts away the backend calls and persistence format.

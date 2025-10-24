@@ -1,59 +1,77 @@
-# 7. نظام الدردشة: من محاكاة إلى نظام حقيقي
+# 07 – Chat System
 
-## النهج الحالي: محاكاة باستخدام `localStorage`
+The chat experience is fully backed by the storage API so that rooms, membership, and messages survive refreshes. This document covers architecture, data shapes, and workflows.
 
-يحتوي التطبيق على نظام دردشة يسمح للمستخدمين بإنشاء غرف والانضمام إليها وإرسال الرسائل. من المهم جدًا فهم أن هذا النظام هو **محاكاة** تعمل بالكامل داخل `localStorage` في متصفح واحد.
+## Data Model
+- **Rooms (`chatRooms`)**
+  ```json
+  {
+    "id": "room-1",
+    "name": "Lobby",
+    "type": "public",
+    "icon": null,
+    "members": ["10001", "10002"],
+    "entryFee": 0,
+    "feeCurrency": "points",
+    "creatorId": "10001"
+  }
+  ```
+- **Messages (`chatMessages`)**
+  ```json
+  {
+    "room-1": [
+      {
+        "id": "msg-123",
+        "roomId": "room-1",
+        "senderId": "10001",
+        "senderName": "Moody",
+        "text": "Hello!",
+        "timestamp": 1761318000000,
+        "type": "message"
+      }
+    ]
+  }
+  ```
+- System notifications inside rooms use `type: 'notification'`.
 
-- **المكونات المسؤولة**: `Chat.tsx`, `CreateRoomModal.tsx`, `RoomView.tsx`.
-- **بنية البيانات**: يتم تخزين الغرف (`chatRooms`) والرسائل (`chatMessages`) في `localStorage`.
-- **آلية العمل**: كل العمليات (إنشاء، انضمام، إرسال رسالة) تقوم بتعديل البيانات في `localStorage` مباشرة.
+## Components
+- `Chat.tsx` – room list, join actions, and top-level layout.
+- `CreateRoomModal.tsx` – collects room metadata and writes to `chatRooms`.
+- `RoomView.tsx` – renders message history and input controls.
 
-### القيود
-- **محلية بالكامل**: كل هذا يحدث في متصفح واحد. مستخدم على جهاز آخر لن يرى نفس الغرف أو الرسائل.
-- **لا يوجد تحديث حي**: لا يوجد اتصال في الوقت الفعلي بين المستخدمين.
+## Joining a Room
+1. `handleJoinRoom` checks room membership and entry fees.
+2. Balances are debited if needed (`points_<userId>` or `jewels_<userId>`).
+3. The room's `members` array is updated to include the user.
+4. A `ChatMessage` with `type: 'notification'` announces the join event.
+5. `notifications_<userId>` receives a summary message.
 
----
+## Leaving a Room
+1. `handleLeaveRoom` removes the user ID from `members`.
+2. Adds a system message marking the departure.
+3. Active room state is cleared so the UI returns to the room list.
 
-## الخطوة التالية: بناء نظام دردشة حقيقي عبر الإنترنت
+## Sending Messages
+1. Messages are pushed to `chatMessages[roomId]`.
+2. The storage hook persists automatically once the state updates.
+3. Room view scrolls to the newest message using refs.
 
-لجعل الدردشة تعمل بين مستخدمين مختلفين على أجهزة مختلفة، نحتاج إلى استخدام تقنية تسمح بالاتصال ثنائي الاتجاه في الوقت الفعلي بين العميل والخادم. الحل الأمثل لهذا هو **WebSockets**.
+## Creating Rooms
+1. Creator defines name, type (public/private), optional icon, and entry fee.
+2. Room is appended to `chatRooms`.
+3. Creator is added to the `members` list by default.
 
-### ما هي WebSockets؟
-- هي تقنية تفتح قناة اتصال مستمرة بين العميل والخادم.
-- بمجرد تأسيس الاتصال، يمكن لكل من العميل والخادم إرسال البيانات إلى بعضهما البعض في أي وقت دون الحاجة إلى إرسال طلب HTTP جديد لكل رسالة.
-- هذا يجعلها مثالية للتطبيقات التي تتطلب تحديثات حية مثل الدردشة، الألعاب عبر الإنترنت، وإشعارات الوقت الفعلي.
+## Notifications
+- Joins/leaves produce user notifications (`notifications_<userId>`).
+- Additional push notifications could be added by watching `chatMessages` changes.
 
-### مكتبة مقترحة: Socket.IO
-- **Socket.IO** هي مكتبة JavaScript تجعل العمل مع WebSockets أسهل بكثير.
-- توفر ميزات إضافية مثل إعادة الاتصال التلقائي، والبث إلى غرف محددة، وتعمل كبديل في حال لم تكن WebSockets مدعومة.
+## Persistence Guarantees
+- Because storage normalizes responses, the UI never crashes on empty data.
+- Bulk fetches (`bulkGetStorageValues`) can load rooms and messages together if needed.
 
-### كيف سيعمل النظام الجديد؟
+## Future Enhancements
+- Real-time updates via WebSockets (current version requires manual refresh or poll).
+- Moderation tools (kick, ban) can extend the room schema.
+- Attachments could be stored by expanding the message payload.
 
-1.  **الخادم (Backend)**:
-    - سيقوم الخادم بإنشاء `Socket.IO server`.
-    - سيستمع الخادم إلى أحداث (events) قادمة من العملاء.
-
-2.  **العميل (Frontend)**:
-    - سيستخدم `Socket.IO client` للاتصال بالخادم.
-    - سيرسل (emits) أحداثًا إلى الخادم عند وقوع إجراءات معينة (مثل إرسال رسالة).
-    - سيستمع (listens) إلى الأحداث القادمة من الخادم لعرض البيانات الجديدة (مثل استلام رسالة).
-
-### مثال على تدفق الأحداث (Event Flow):
-
-- **الاتصال**:
-  - العميل يتصل بالخادم: `socket.connect()`.
-  - الخادم يستقبل الاتصال: `io.on('connection', (socket) => { ... });`
-
-- **الانضمام إلى غرفة**:
-  - العميل يرسل حدث `join_room` مع `roomId`: `socket.emit('join_room', { roomId: 'R1234' });`
-  - الخادم يستمع للحدث ويضم العميل إلى الغرفة المحددة: `socket.on('join_room', ({ roomId }) => { socket.join(roomId); });`
-
-- **إرسال رسالة**:
-  - العميل يرسل حدث `send_message` مع تفاصيل الرسالة: `socket.emit('send_message', { roomId: 'R1234', text: 'Hello!' });`
-  - الخادم يستمع للحدث، يحفظ الرسالة في قاعدة البيانات، ثم يبث الرسالة الجديدة **إلى كل العملاء في نفس الغرفة**: `io.to(roomId).emit('receive_message', newMessage);`
-
-- **استلام رسالة**:
-  - جميع العملاء في الغرفة يستمعون لحدث `receive_message`: `socket.on('receive_message', (newMessage) => { ... });`
-  - عند استلام الحدث، يقومون بتحديث واجهتهم لعرض الرسالة الجديدة.
-
-هذا النموذج يضمن أن جميع المستخدمين في غرفة الدردشة يتلقون الرسائل الجديدة على الفور، مما يخلق تجربة دردشة حقيقية في الوقت الفعلي. لمزيد من التفاصيل التقنية، راجع **[دليل تكامل الواجهة الخلفية](./09-backend-integration.md)**.
+At present the chat is functionally complete for asynchronous collaboration: data is shared via the backend storage file and accessible through the Cloudflare tunnel to remote clients.

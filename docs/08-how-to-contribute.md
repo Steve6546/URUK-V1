@@ -1,58 +1,62 @@
-# 8. كيفية المساهمة والتطوير
+# 08 – How to Contribute
 
-هذا الدليل مخصص للمطورين الذين يرغبون في فهم كيفية تعديل الكود الحالي، إضافة ميزات جديدة، أو المساهمة في تطوير المشروع.
+This guide outlines the workflow for contributing changes now that URUK ships with a full backend and tunnel setup.
 
-## المتطلبات الأساسية
+## Prerequisites
+- Node.js 22 (or newer) installed system-wide.
+- npm (bundled with Node.js).
+- PowerShell 7+ for running the helper scripts on Windows.
+- Cloudflare Tunnel binary (`cloudflared`) available on your PATH.
 
-- فهم جيد لـ **React** (خاصة Hooks).
-- معرفة بـ **TypeScript**.
-- الإلمام بـ **TailwindCSS**.
+## Development Workflow
+1. **Fork / clone** the repository.
+2. **Install dependencies**:
+   ```bash
+   npm install
+   cd server && npm install
+   ```
+3. **Create a feature branch**:
+   ```bash
+   git checkout -b feature/<short-description>
+   ```
+4. **Start services** (choose one):
+   - `pwsh scripts/start-services.ps1` (recommended).
+   - or manually: `cd server && npm run dev`, plus `cloudflared tunnel --url http://localhost:3001`.
+5. **Run the frontend**: `npm run dev`.
+6. **Implement changes** with TypeScript and Express best practices.
+7. **Run smoke tests** using the checklist in the README.
+8. **Commit** with descriptive messages and open a pull request.
 
-## تعديل الواجهة الأمامية (Frontend)
+## Coding Standards
+- Use existing hooks and API helpers instead of writing ad-hoc fetch calls.
+- Keep components functional and prefer hooks (`useState`, `useEffect`, `useCallback`).
+- Keep documentation (`docs/`) in sync with behaviour changes.
+- Use ASCII characters in commits and documentation to avoid encoding issues.
+- If you touch the storage service, back up `storage.json` first.
 
-### إضافة مكون أو شاشة جديدة
+## Testing Expectations
+- No automated tests yet; rely on manual smoke tests (login, chat, send points, etc.).
+- Verify `storage.json` reflects your changes.
+- Check `cloudflared.log` and `server-stdout.log` for errors.
+- Ensure the connection badge displays correctly after backend changes.
 
-لنفترض أنك تريد إضافة شاشة جديدة، على سبيل المثال "شاشة الإنجازات" (Achievements Screen).
+## Updating Documentation
+- Update `README.md` for high-level changes.
+- Modify specific docs (`02-frontend-stack`, `04-data-persistence`, etc.) when altering corresponding areas.
+- Maintain clarity and remove obsolete information.
 
-1.  **إنشاء ملف المكون**: في مجلد `components/`، قم بإنشاء ملف جديد باسم `Achievements.tsx`.
-2.  **إدارة حالة العرض في `App.tsx`**: أضف متغير حالة جديد لتتبع ما إذا كانت الشاشة يجب أن تظهر.
-    ```typescript
-    const [showAchievements, setShowAchievements] = useState(false);
-    ```
-3.  **تحديث منطق العرض**: في `App.tsx`، قم بتعديل الدالة التي تقرر أي مكون يتم عرضه لإدراج المكون الجديد.
-4.  **إضافة زر لفتح الشاشة**: في المكان المناسب، أضف زرًا يقوم بتحديث الحالة (`setShowAchievements(true)`).
+## Deployment Checks
+- Confirm the tunnel hostname and Vercel `VITE_API_BASE_URL` are aligned.
+- Re-run `npm run build` to ensure there are no type or bundling errors.
 
-### تعديل الحالة (State)
-- **عند التعامل مع الخادم**: من الأفضل استخدام مكتبة مثل **React Query** لإدارة حالة الخادم.
-- **عند التعامل مع حالة العميل**: استخدم `useState`. عند تحديث حالة تعتمد على قيمتها السابقة، استخدم دائمًا دالة التحديث:
-  - **صحيح**: `setPoints(prevPoints => prevPoints + 10)`
-  - **خطأ**: `setPoints(points + 10)`
+## Scripts
+- `scripts/start-services.ps1` and `scripts/stop-services.ps1` should remain idempotent. Update them when you add new background services.
 
----
+## Pull Request Checklist
+- [ ] Code compiles via `npm run build`.
+- [ ] Storage writes and reads succeed.
+- [ ] Documentation updates included.
+- [ ] Tunnel hostname noted if relevant.
+- [ ] No console errors or CORS issues observed.
 
-## خريطة الطريق والتطويرات المستقبلية
-
-الأولوية القصوى لتطوير هذا المشروع هي تحويله من تطبيق يعمل من جانب العميل فقط إلى تطبيق كامل (Full-Stack).
-
-### 1. بناء الواجهة الخلفية (Backend) - الأولوية القصوى
-- **الوصف**: هذه هي الخطوة الأكثر أهمية لجعل التطبيق حقيقيًا وآمنًا وقابلاً للتطوير.
-- **المهام**:
-    - بناء خادم باستخدام Node.js و Express.js.
-    - ربط الخادم بقاعدة بيانات (مثل MongoDB).
-    - إنشاء واجهات برمجية (APIs) لجميع الميزات: المصادقة، إدارة المستخدمين، منطق اللعبة، إلخ.
-    - تنفيذ نظام دردشة في الوقت الفعلي باستخدام Socket.IO.
-- **للبدء**: **يرجى اتباع [دليل تكامل الواجهة الخلفية](./09-backend-integration.md) الشامل**.
-
-### 2. تعديل الواجهة الأمامية للتكامل
-- **الوصف**: بعد بناء الواجهة الخلفية، يجب تعديل الواجهة الأمامية للتواصل معها.
-- **المهام**:
-    - إزالة الاعتماد على `localStorage` للبيانات الديناميكية.
-    - بناء دوال في `api/apiClient.ts` للتواصل مع جميع نقاط النهاية في الـ API.
-    - دمج مكتبة مثل **React Query** لإدارة حالة الخادم بكفاءة.
-    - ربط مكونات الدردشة بـ Socket.IO client.
-
-### 3. إضافة ميزات جديدة (بعد بناء الواجهة الخلفية)
-بمجرد وجود بنية تحتية قوية للخادم، يمكن إضافة ميزات جديدة بسهولة:
-- **نظام الأصدقاء**: القدرة على إضافة مستخدمين آخرين كأصدقاء.
-- **لوحة المتصدرين (Leaderboard)**: عرض قائمة بأعلى المستخدمين.
-- **إنجازات (Achievements)**: منح مكافآت للمستخدمين عند تحقيق أهداف معينة.
+Following this process keeps the repository healthy and makes onboarding new contributors easier as the platform evolves.

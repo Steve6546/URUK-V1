@@ -1,46 +1,105 @@
-# لعبة عداد النقاط - توثيق المشروع
+# URUK Platform
 
-## 1. نظرة عامة على المشروع
+URUK is now a fully wired system that pairs a Vite + React frontend with a live Express backend. The backend runs locally on port `3001` and is exposed to the internet through a Cloudflare Tunnel so the Vercel-hosted UI can talk to it in real time. All features—authentication, counters, notifications, chat, lottery, and purchase history—read and write via the shared REST storage API.
 
-لعبة بسيطة حيث يقوم المستخدمون بجمع النقاط والمجوهرات وشراء عدادات يمكن تفعيلها كل 24 ساعة لكسب أموال افتراضية. يتم حفظ كل التقدم محليًا في المتصفح باستخدام `localStorage`.
+## How Everything Fits Together
+- **Frontend**: Vite + React (TypeScript) app in the project root. It communicates with the backend through `api/apiClient.ts`, which is configured by `VITE_API_BASE_URL`.
+- **Backend**: Express server in `server/`. It stores state inside `server/data/storage.json`, returning entries shaped as `{ value, updatedAt }` for every key.
+- **Tunnel**: Cloudflare quick tunnel forwards `https://*.trycloudflare.com` to `http://localhost:3001`. Update the Vercel environment variable whenever the tunnel host changes.
+- **Scripts**: PowerShell helpers in `scripts/` start and stop both the backend and tunnel while capturing logs and PID metadata.
 
-## 2. التقنيات المستخدمة
+## Quick Start (Local)
+1. Install dependencies in both workspaces:
+   ```bash
+   npm install           # root (frontend)
+   cd server && npm install
+   ```
+2. Copy environment templates and adjust as needed:
+   ```bash
+   cp .env.example .env
+   cd server && cp .env.example .env
+   ```
+3. Launch services (recommended):
+   ```powershell
+   pwsh scripts/start-services.ps1
+   ```
+   The script starts `node index.js` and `cloudflared`, writing logs to `server-stdout.log`, `server-stderr.log`, and `cloudflared.log`.
+4. Start the Vite dev server in another terminal:
+   ```bash
+   npm run dev
+   ```
+5. Visit `http://localhost:5173`. The connection badge in the header should show `Connected ✅` when the tunnel and backend are reachable.
 
-- **الواجهة الأمامية (Frontend):**
-  - **React**: مكتبة JavaScript لبناء واجهات المستخدم.
-  - **TypeScript**: لإضافة أنواع ثابتة إلى JavaScript.
-  - **TailwindCSS**: إطار عمل CSS لتصميم سريع ومرن.
-- **إدارة الحالة (State Management):**
-  - React Hooks (`useState`, `useEffect`, `useRef`).
-  - Hook مخصص `useLocalStorage` لحفظ الحالة في `localStorage`.
-- **الواجهة الخلفية (Backend):**
-  - **لا يوجد حاليًا.** التطبيق يعمل بالكامل من جانب العميل (client-side).
-  - يتم استخدام `localStorage` كقاعدة بيانات محلية لتخزين جميع بيانات المستخدمين والغرف والرسائل.
+### Manual start commands
+```powershell
+pwsh scripts/start-services.ps1 -UseNpmDev   # start backend with nodemon
+pwsh scripts/stop-services.ps1               # stops backend & cloudflared
+```
 
-**ملاحظة هامة حول البنية الحالية:**
-- **الأمان:** البنية الحالية التي تعتمد على `localStorage` غير آمنة للتطبيقات الإنتاجية. يمكن للمستخدمين تعديل بياناتهم بسهولة من المتصفح.
-- **البيانات المشتركة:** ميزات مثل الدردشة ليست "حية" بين الأجهزة المختلفة. الرسائل والغرف تكون مرئية فقط في نفس المتصفح الذي تم إنشاؤها فيه.
+## Deploying with Vercel + Cloudflare Tunnel
+1. Start the backend locally (use the script above or `npm run dev` inside `server/`).
+2. Run the tunnel:
+   ```powershell
+   cloudflared tunnel --url http://localhost:3001 --logfile cloudflared.log --no-autoupdate
+   ```
+   Note the generated hostname, e.g. `https://graham-printed-dreams-swimming.trycloudflare.com`.
+3. On Vercel, set `VITE_API_BASE_URL=https://<tunnel-host>/api` and redeploy. Repeat whenever the tunnel host changes.
+4. The frontend uses `fetch` with credentials enabled, so keep the tunnel alive for as long as Vercel should reach your backend.
 
-## 3. التوثيق المفصل
+## Environment Variables
+### Root `.env`
+| Variable | Description |
+| -------- | ----------- |
+| `VITE_API_BASE_URL` | Base URL for the storage API. Defaults to `http://localhost:3001/api` when not set. |
+| `GEMINI_API_KEY` | Example placeholder exposed via `vite.config.ts` (optional). |
 
-للحصول على شرح تفصيلي لكل جزء من المشروع، يرجى الرجوع إلى الملفات الموجودة في مجلد `docs`.
+### `server/.env`
+| Variable | Description |
+| -------- | ----------- |
+| `PORT` | Backend port (defaults to `3001`). |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated list of allowed origins; supports wildcards like `https://*.trycloudflare.com`. |
 
-- **[01-project-structure.md](./docs/01-project-structure.md)**: شرح مفصل لهيكل المجلدات والملفات.
-- **[02-frontend-stack.md](./docs/02-frontend-stack.md)**: نظرة عميقة على تقنيات الواجهة الأمامية المستخدمة.
-- **[03-state-management.md](./docs/03-state-management.md)**: كيفية إدارة حالة التطبيق وتمرير البيانات.
-- **[04-data-persistence.md](./docs/04-data-persistence.md)**: شرح آلية تخزين البيانات باستخدام `localStorage`.
-- **[05-authentication.md](./docs/05-authentication.md)**: تفاصيل نظام المصادقة من جانب العميل.
-- **[06-core-features.md](./docs/06-core-features.md)**: شرح منطق عمل ميزات اللعبة الأساسية.
-- **[07-chat-system.md](./docs/07-chat-system.md)**: كيفية محاكاة نظام الدردشة والانتقال إلى نظام حقيقي.
-- **[08-how-to-contribute.md](./docs/08-how-to-contribute.md)**: دليل للمطورين للمساهمة في المشروع.
-- **[09-backend-integration.md](./docs/09-backend-integration.md)**: **(جديد)** دليل شامل للانتقال إلى خادم حقيقي وقاعدة بيانات.
-- **[10-color-palette.md](./docs/10-color-palette.md)**: **(جديد)** توثيق لوحة الألوان المستخدمة في التصميم.
+## API Surface
+All endpoints are prefixed with `/api`:
 
-## 4. الانتقال إلى بنية خادم-عميل حقيقية
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| `GET` | `/api/test` | Health check used by the frontend connection badge. |
+| `GET` | `/api/storage/:key` | Returns `{ value, updatedAt }` for the given key. |
+| `PUT` | `/api/storage/:key` | Upserts `{ value, updatedAt }` (server adds/updates `updatedAt`). |
+| `DELETE` | `/api/storage/:key` | Removes a key. Returns `204` even if the key was missing. |
+| `POST` | `/api/storage/bulk` | Accepts `{ keys: string[] }` and returns an object of entries. |
 
-تم تصميم هذا المشروع ليكون نقطة انطلاق. الخطوة التالية الطبيعية لتطوير هذا التطبيق هي بناء واجهة خلفية (Backend) حقيقية لتمكين:
-- **التخزين الآمن** لبيانات المستخدمين في قاعدة بيانات.
-- **الميزات التفاعلية والحية** مثل الدردشة بين المستخدمين على أجهزة مختلفة.
-- **منع الغش** عن طريق وضع منطق اللعبة الأساسي على الخادم.
+The storage file `server/data/storage.json` mirrors this shape. Default array keys (users, notifications, chat rooms, chat messages, counters, lottery data, purchase history) are created on first load to avoid 404s.
 
-للحصول على إرشادات مفصلة حول كيفية تحقيق ذلك، يرجى قراءة **[دليل تكامل الواجهة الخلفية](./docs/09-backend-integration.md)**.
+## Feature Highlights
+- **Authentication**: Email or phone signup/login with SHA-256 hashing before storage.
+- **User data**: Each user gets dedicated keys (e.g. `points_<userId>`). The `useLocalStorage` hook synchronizes with the backend transparently.
+- **Counters & Stores**: Purchasing counters, points, or jewels logs transactions and sends notifications.
+- **Send Points / Gift Counter**: Reads current balances, applies business rules, persists outcomes.
+- **Notifications**: Stored per user, surfaced via real-time badge and panel.
+- **Chat**: Global rooms and message logs stored under `chatRooms` and `chatMessages`; join/leave events raise notifications.
+- **Lottery**: Pot, participants, history, and rewards persisted in storage.
+- **Connectivity UX**: Header badge plus toast messages reflect tunnel availability using the `/api/test` ping.
+
+## Development Tooling
+- **Vite 6 + React 19 + TypeScript 5.8** for the SPA.
+- **Tailwind-inspired utility classes** baked into component styles.
+- **Express 5** backend with `cors`, `dotenv`, `morgan`.
+- **Cloudflare Tunnel** for secure, temporary public access.
+- **PowerShell scripts** (`scripts/start-services.ps1`, `scripts/stop-services.ps1`) to manage long-running processes on Windows.
+- **npm scripts**: `npm run dev`, `npm run build`, `npm run preview` (frontend) and `npm run dev`, `npm start` (server).
+
+## Logs and Diagnostics
+- `server-stdout.log` / `server-stderr.log`: backend output redirected by the start script.
+- `cloudflared.log`: tunnel logs, including the generated hostname.
+- `server/data/storage.json`: inspect to confirm persistence after smoke tests.
+
+## Smoke Test Checklist
+1. Visit the deployed Vercel site while the tunnel is active.
+2. Sign up a user, log in, and confirm user data appears in storage.
+3. Open a chat room and send a message; verify `chatMessages` updates.
+4. Trigger counters or send points and watch the corresponding notifications and transaction history update.
+5. Check the connection badge and toast behavior by stopping/starting the backend.
+
+URUK is now production-ready once you convert the temporary Cloudflare tunnel into a named tunnel or deploy the backend to a permanent host.

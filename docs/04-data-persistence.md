@@ -1,61 +1,61 @@
-# 4. تخزين البيانات (Data Persistence)
+# 04 – Data Persistence & Storage API
 
-## النهج الحالي: الاعتماد على `localStorage`
+The backend exposes a lightweight storage service on top of a JSON file. This document walks through how data is structured, which endpoints are available, and how the frontend consumes them.
 
-بما أن هذا التطبيق يعمل بالكامل من جانب العميل (client-side) ولا يتصل بأي خادم، فإننا نعتمد على واجهة برمجة تطبيقات (API) يوفرها المتصفح تسمى **`localStorage`** لتخزين البيانات بشكل دائم.
+## Storage File
+- Location: `server/data/storage.json`
+- Format: top-level object where each property is a storage key.
+- Value shape:
+  ```json
+  {
+    "someKey": {
+      "value": { /* arbitrary JSON */ },
+      "updatedAt": "2025-10-24T14:52:15.321Z"
+    }
+  }
+  ```
+- `updatedAt` is set by the server whenever the entry is created or mutated.
+- Default keys (arrays) are seeded on boot: `users`, `notifications`, `chatRooms`, `chatMessages`, `userCounters`, `lotteryParticipants`, `lotteryHistory`, `purchaseHistory`.
 
-- `localStorage` هو جزء من "Web Storage API" في المتصفحات الحديثة.
-- البيانات المخزنة فيه **تبقى محفوظة** حتى بعد إغلاق المتصفح.
-- نحن نستخدم الهوك المخصص `useLocalStorage` لتسهيل التعامل معه.
+## Service Logic (`server/services/storageService.js`)
+- **Normalization**: Existing primitives are wrapped into `{ value, updatedAt }`.
+- **Fallbacks**: Missing keys return `{ value: null, updatedAt: <timestamp> }` unless a default array is defined, in which case an empty array is created and persisted.
+- **Bulk operations**: `bulkGet(keys[])` returns a map of `{ key: entry }`, guaranteeing every requested key has a structured response.
+- **Deletion**: Removes the key if it exists, otherwise no-op. Always safe to call.
 
-### المزايا والعيوب للنهج الحالي
+## REST API (`/api/storage/*`)
 
-#### المزايا:
-- **البساطة والسرعة**: لا يتطلب أي إعداد للخادم ويعمل بسرعة.
-- **التشغيل بدون اتصال (Offline Functionality)**: التطبيق يعمل بشكل كامل بدون اتصال بالإنترنت.
+| Method | Path | Body | Response | Notes |
+| ------ | ---- | ---- | -------- | ----- |
+| `GET` | `/api/storage/:key` | – | `{ value, updatedAt }` | Never 404s; defaults to empty array or `null`. |
+| `PUT` | `/api/storage/:key` | `{ value: any }` | `{ value, updatedAt }` | `updatedAt` refreshed server-side. |
+| `DELETE` | `/api/storage/:key` | – | `204 No Content` | Idempotent. |
+| `POST` | `/api/storage/bulk` | `{ keys: string[] }` | `{ [key]: { value, updatedAt } }` | Missing keys filled with defaults. |
 
-#### العيوب والقيود:
-- **الأمان**: `localStorage` **غير آمن على الإطلاق**. يمكن للمستخدم تعديل بياناته بسهولة.
-- **لا للمشاركة**: البيانات مخزنة **فقط في المتصفح الحالي وعلى الجهاز الحالي**. لا يمكن مشاركتها أو مزامنتها.
-- **محدودية السعة**: معظم المتصفحات تحدد حجم `localStorage` بحوالي 5-10 ميغابايت.
+All routes live in `server/routes/storageRoutes.js` and are handled by `storageController.js`.
 
----
+## Client Consumption (`api/apiClient.ts`)
+- `getStorageValue(key, defaultValue)` – unwraps the server response and falls back to the provided default when the stored `value` is `null` or `undefined`.
+- `setStorageValue(key, value)` – POST-style wrapper via `PUT`.
+- `deleteStorageValue(key)` – removes the key.
+- `bulkGetStorageValues(keys)` – mirrors the backend bulk endpoint.
+- `pingApi()` – simple `/api/test` call, used for connection status.
 
-## الخطوة التالية: الانتقال إلى قاعدة بيانات حقيقية
+Fetch requests include `credentials: 'include'` and JSON headers by default.
 
-للتغلب على قيود `localStorage` وبناء تطبيق قابل للتطوير وآمن، يجب نقل تخزين البيانات إلى خادم وقاعدة بيانات.
+## Key Naming Conventions
+- Global collections: `users`, `chatRooms`, `chatMessages`, etc.
+- Per-user collections: `points_<userId>`, `notifications_<userId>`, `purchaseHistory_<userId>`, etc.
+- Ad-hoc keys created by features follow the pattern defined in `App.tsx` (`userDataKey` / `globalDataKey` helpers).
 
-### كيف يعمل النموذج الجديد؟
+## Persistence Guarantees
+- Writes are queued to avoid race conditions (`writeQueue` Promise chain).
+- Storage is cached in memory to minimize disk reads.
+- Restarting the server keeps previous data; the service migrates existing items into the normalized shape on load.
 
-سيتكون النظام من ثلاثة أجزاء رئيسية:
-1.  **العميل (Client)**: واجهة React الأمامية التي يستخدمها المستخدم.
-2.  **الخادم (Server / Backend)**: تطبيق يعمل على خادم بعيد (مثل Node.js) يكون مسؤولاً عن منطق الأعمال.
-3.  **قاعدة البيانات (Database)**: نظام تخزين متخصص (مثل MongoDB أو PostgreSQL) متصل بالخادم.
+## Maintaining the Store
+- Back up `storage.json` before resetting environments.
+- To clear everything, stop the server, delete the file, then restart. Defaults will be regenerated.
+- To inspect current state, open the JSON file while the backend is stopped or use the REST API for read-only access.
 
-**تدفق البيانات سيصبح كالتالي:**
-
-1.  **طلب البيانات**:
-    - العميل (الواجهة الأمامية) لم يعد يقرأ من `localStorage`.
-    - بدلاً من ذلك، يرسل طلبًا عبر الشبكة (API Request) إلى الخادم. (مثال: `GET /api/user/profile`)
-2.  **معالجة الطلب**:
-    - الخادم يستقبل الطلب.
-    - يتصل بقاعدة البيانات لجلب أو تعديل البيانات المطلوبة.
-3.  **إرجاع الاستجابة**:
-    - الخادم يرسل البيانات مرة أخرى إلى العميل على شكل استجابة (عادة بصيغة JSON).
-4.  **عرض البيانات**:
-    - العميل يستقبل الاستجابة ويعرض البيانات للمستخدم.
-
-### لماذا هذا أفضل؟
-
-- **الأمان**: منطق الأعمال الحساس (مثل إضافة النقاط) يتم على الخادم. لا يمكن للمستخدم التلاعب به مباشرة.
-- **مصدر الحقيقة الوحيد (Single Source of Truth)**: قاعدة البيانات هي المصدر الموثوق الوحيد للبيانات. هذا يضمن أن جميع المستخدمين على جميع الأجهزة يرون نفس البيانات المحدثة.
-- **المشاركة والمزامنة**: يمكن للمستخدم تسجيل الدخول من أي جهاز والوصول إلى نفس بياناته. الميزات مثل الدردشة تصبح ممكنة.
-- **قابلية التوسع**: قواعد البيانات مصممة للتعامل مع كميات هائلة من البيانات بكفاءة.
-
-### ماذا يعني هذا للواجهة الأمامية؟
-
-يجب تعديل الواجهة الأمامية للتوقف عن استخدام `useLocalStorage` للبيانات الديناميكية. بدلاً من ذلك، ستقوم بـ:
-- **استخدام `fetch` أو مكتبة مثل `axios`** لإرسال طلبات HTTP إلى الخادم. (تم إنشاء مجلد `api` لهذا الغرض).
-- **استخدام مكتبة لإدارة حالة الخادم** مثل `React Query` للتعامل مع جلب البيانات وتخزينها مؤقتًا.
-
-للحصول على دليل تفصيلي حول كيفية بناء هذا الخادم وتعديل الواجهة الأمامية، راجع **[دليل تكامل الواجهة الخلفية](./09-backend-integration.md)**.
+With this setup, the frontend behaves much like a single-page app backed by a database, while the underlying implementation stays simple and file-based.

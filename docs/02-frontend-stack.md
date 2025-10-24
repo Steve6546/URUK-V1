@@ -1,46 +1,50 @@
-# 2. تقنيات الواجهة الأمامية (Frontend Stack)
+# 02 – Frontend Stack
 
-هذا المستند يشرح التقنيات الأساسية التي تم بناء واجهة المستخدم (UI) للتطبيق بها.
+This guide captures how the Vite + React app is composed, and which libraries and patterns power each feature.
 
-## React
+## Core Technologies
+- **Vite 6** – development server and bundler with fast HMR.
+- **React 19** – UI library (function components + hooks everywhere).
+- **TypeScript 5.8** – type safety for components, hooks, and API helpers.
+- **Tailwind-inspired utility classes** – styles are written inline as utility class strings (no external CSS framework required).
 
-- **ما هو؟**: مكتبة JavaScript مفتوحة المصدر لبناء واجهات مستخدم تفاعلية.
-- **كيف يُستخدم في المشروع؟**:
-  - **العمارة القائمة على المكونات (Component-Based Architecture)**: تم تقسيم واجهة المستخدم بأكملها إلى مكونات صغيرة وقابلة لإعادة الاستخدام (موجودة في مجلد `components`). على سبيل المثال، `Header.tsx` هو مكون يعرض رصيد المستخدم، و`MainCounter.tsx` هو مكون يعرض العداد الرئيسي. هذا النهج يجعل الكود منظمًا وسهل التعديل.
-  - **الحالة (State) والخصائص (Props)**:
-    - يتم استخدام `useState` Hook لإدارة الحالة الداخلية لكل مكون (مثل حقل إدخال في نموذج).
-    - يتم تمرير البيانات والوظائف من المكونات الأم (مثل `App.tsx`) إلى المكونات الفرعية عبر `props`. هذا هو التدفق الأساسي للبيانات في التطبيق.
-  - **React Hooks**: نعتمد بشكل كبير على Hooks مثل `useState`, `useEffect`, و `useRef` لإدارة حالة المكون، والتعامل مع التأثيرات الجانبية (مثل تحديث البيانات عند تغييرها)، والوصول إلى عناصر DOM مباشرة.
+## Application Entry
+- `index.tsx` bootstraps the React application.
+- `App.tsx` contains the entire app shell, including routing-like conditional rendering, feature panels, toast notifications, and the connection badge.
 
-## TypeScript
+## Data Access Layer
+`api/apiClient.ts` centralizes HTTP interactions:
+- Automatically prefixes requests with `VITE_API_BASE_URL` (falls back to `http://localhost:3001/api`).
+- Adds JSON headers and `credentials: 'include'`.
+- Normalizes storage responses (accepts `{ value, updatedAt }` or fallbacks).
+- Exposes helper functions: `getStorageValue`, `setStorageValue`, `deleteStorageValue`, `bulkGetStorageValues`, and `pingApi`.
 
-- **ما هو؟**: امتداد (superset) للغة JavaScript يضيف ميزات كتابة الأنواع الثابتة (static typing).
-- **كيف يُستخدم في المشروع؟**:
-  - **سلامة الأنواع (Type Safety)**: كل متغير، دالة، وكائن في المشروع له نوع محدد. هذا يتم تعريفه في ملف `types.ts` وفي داخل المكونات نفسها.
-  - **مثال**:
-    ```typescript
-    // في types.ts
-    export interface User {
-      userId: string;
-      name: string;
-    }
+## Hooks
+- **`useLocalStorage`** (custom) – Provides a React stateful value tied to a storage key. Reads from the backend on mount, persists on change, and offers a `clearValue` helper.
+- Uses `useEffect`, `useCallback`, and `AbortSignal` support by virtue of fetch.
 
-    // في مكون ما
-    const [currentUser, setCurrentUser] = useState<User | null>(null);
-    ```
-    هذا يضمن أن `currentUser` سيكون دائمًا إما كائنًا يطابق بنية `User` أو `null`، مما يمنع الأخطاء الشائعة أثناء التطوير.
-  - **تحسين تجربة المطور**: يوفر TypeScript إكمالًا تلقائيًا أفضل للكود (autocompletion) واكتشافًا فوريًا للأخطاء في محرر الكود، مما يزيد من سرعة التطوير ويقلل من الأخطاء.
+## Component Highlights
+- **Header** – Displays balances, notification badge, menu toggle, and the new connectivity status (`Connected ✅` / `Disconnected ❌`).
+- **Auth** – Handles signup/login with SHA-256 hashing using the Web Crypto API.
+- **Chat, Store, Counters** – Each module lives in its own file under `components/` and reads/writes data via the hooks.
+- **NotificationsPanel** – Modal overlay for viewing stored notifications.
+- **CreateRoomModal, RoomView** – Manage chat rooms and messages.
 
-## TailwindCSS
+## State & Routing Pattern
+The app runs as a single page with conditional UI:
+- Booleans like `showChat`, `showStore`, etc. determine which component tree to render.
+- All feature toggles sit in `App.tsx`, making it simple to follow the UI flow.
+- Derived state (e.g. unread counts, transaction logs) is computed locally but persisted through the storage API.
 
-- **ما هو؟**: إطار عمل CSS يعتمد على نهج "Utility-First". بدلاً من كتابة ملفات CSS منفصلة، تقوم ببناء التصميم مباشرة في ملفات HTML (أو JSX في حالتنا) باستخدام فئات (classes) محددة مسبقًا.
-- **كيف يُستخدم في المشروع؟**:
-  - **تصميم سريع**: يتم تطبيق الأنماط مباشرة على العناصر. على سبيل المثال، لإنشاء زر بتصميم معين، نكتب:
-    ```jsx
-    <button className="bg-yellow-400 text-black font-bold py-2 px-4 rounded-lg">
-      Click Me
-    </button>
-    ```
-    هذا يغنينا عن كتابة CSS مخصص لهذا الزر.
-  - **استجابة للشاشات (Responsiveness)**: يوفر TailwindCSS أدوات سهلة لجعل التصميم متجاوبًا مع أحجام الشاشات المختلفة (مثل `md:`, `lg:`).
-  - **لا يوجد CSS مخصص تقريبًا**: يتم تحميل TailwindCSS عبر CDN في `index.html`. هناك القليل جدًا من CSS المخصص في المشروع، مما يجعل قاعدة الكود نظيفة وموحدة.
+## Build & Deployment
+- `npm run dev` – local development with Vite.
+- `npm run build` – production build; artifacts land in `dist/`.
+- `npm run preview` – serve a production build locally.
+- Deployment on Vercel uses the build output; ensure `VITE_API_BASE_URL` points to the active tunnel or backend host.
+
+## Testing Tips
+- Watch the header badge—it's a quick signal that the backend is reachable.
+- Inspect `server/data/storage.json` to confirm the frontend called the persistence API correctly.
+- Use browser dev tools to monitor `fetch` calls to the tunnel host while running the deployed frontend.
+
+The frontend stack is intentionally lightweight: hooks orchestrate state, components render sections, and the API client manages all remote persistence.

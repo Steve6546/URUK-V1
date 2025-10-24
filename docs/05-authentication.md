@@ -1,54 +1,54 @@
-# 5. نظام المصادقة (Authentication)
+# 05 – Authentication & Account Data
 
-## النهج الحالي: المصادقة من جانب العميل (غير آمن)
+The authentication flow is fully client-driven but persists user records through the backend storage API. This document explains the mechanics and data shapes involved.
 
-نظام المصادقة في هذا التطبيق مسؤول عن التحقق من هوية المستخدمين، مما يسمح لهم بتسجيل الدخول وإنشاء حسابات جديدة. يتم كل هذا من جانب العميل (client-side) دون أي اتصال بخادم.
+## User Model
+Stored under the `users` key as an array of objects shaped like:
+```json
+{
+  "userId": "10001",
+  "name": "Test User",
+  "email": "user@example.com",
+  "phone": "+9647000000000",
+  "hashedPassword": "e3b0c442... (SHA-256)",
+  "isVerified": false,
+  "nameChangeCount": 0,
+  "profilePictureChangeCount": 0,
+  "profileBannerChangeCount": 0
+}
+```
+`userId` is generated client-side as a zero-padded numeric string and guaranteed unique.
 
-- **`components/Auth.tsx`**: هذا المكون يحتوي على كل الواجهات والمنطق المتعلق بالمصادقة.
-- **آلية العمل**: يتم تخزين قائمة المستخدمين وكلمات المرور المجزأة (`SHA-256`) في `localStorage`. عند تسجيل الدخول، تتم مقارنة الهاش المدخل بالهاش المخزن.
+## Signup Flow (`components/Auth.tsx`)
+1. User chooses email or phone authentication.
+2. Required fields validated locally.
+3. Password hashed with `crypto.subtle.digest('SHA-256', ...)`.
+4. New user object assembled and appended to the `users` collection via `useLocalStorage`.
+5. User is logged in immediately (`currentUser` state persists the entire object).
 
-### تحذير أمني هام
+## Login Flow
+1. User selects email or phone.
+2. Matching user is retrieved from the persisted `users` array.
+3. Submitted password hashed and compared with the stored `hashedPassword`.
+4. On success, `currentUser` is set and per-user keys (points, notifications, etc.) become active via `userDataKey`.
 
-**هذا النظام غير آمن على الإطلاق للتطبيقات الحقيقية.**
-- **التجزئة من جانب العميل**: العملية بأكملها تحدث في متصفح المستخدم ويمكن التلاعب بها.
-- **تخزين البيانات**: يمكن لأي شخص لديه وصول إلى المتصفح فتح `localStorage` ورؤية قائمة المستخدمين وكلمات المرور المجزأة.
-- **الغرض**: تم تصميم هذا النظام لأغراض تعليمية وتوضيحية فقط، ولتمكين التطبيق من العمل بالكامل بدون خادم.
+## Session Handling
+- Session is purely client-based; `currentUser` is stored via `useLocalStorage`.
+- Logging out clears `currentUser` and resets derived state.
+- Future enhancements (server-side sessions) can hook into the same storage keys or swap out the persistence service.
 
----
+## Verification & Profile Updates
+- Users can toggle verification workflows in `AccountVerification.tsx`.
+- Name, profile picture, and banner modifications track their counts (enforcing free change limits).
+- These preferences are stored under keys like `profileName_<userId>` or `profilePicture_<userId>`.
 
-## الخطوة التالية: تطبيق المصادقة الحقيقية (Server-Side)
+## Security Considerations
+- Passwords are hashed but not salted. For production use, add salt and migrate to server-side verification.
+- Because storage.json sits on disk, treat it as sensitive. Restrict access or move to encrypted storage when deploying permanently.
+- `credentials: 'include'` is enabled for future session cookie support; currently there is no cookie-based auth.
 
-في تطبيق حقيقي، يجب أن تتم عملية المصادقة بالكامل على الخادم. النهج الأكثر شيوعًا واستخدامًا هو **JSON Web Tokens (JWT)**.
+## Resetting Accounts
+- Use the storage API to delete user-specific keys (`DELETE /api/storage/users`, `DELETE /api/storage/currentUser`, etc.).
+- Alternatively, manually edit `storage.json` while the server is stopped.
 
-### كيف يعمل نظام المصادقة باستخدام JWT؟
-
-1.  **طلب التسجيل/الدخول (من العميل إلى الخادم)**:
-    - المستخدم يدخل بياناته (بريد إلكتروني، كلمة مرور) في الواجهة الأمامية.
-    - الواجهة الأمامية ترسل هذه البيانات إلى نقطة نهاية (API endpoint) على الخادم (مثال: `POST /api/auth/login`).
-
-2.  **التحقق وإنشاء التوكن (على الخادم)**:
-    - الخادم يستقبل البيانات.
-    - يتحقق من صحة كلمة المرور بمقارنتها بالهاش المخزن في قاعدة البيانات (يجب استخدام خوارزمية تجزئة قوية مثل `bcrypt` على الخادم).
-    - إذا كانت البيانات صحيحة، يقوم الخادم بإنشاء **JWT**. هذا التوكن هو سلسلة نصية مشفرة تحتوي على معلومات حول المستخدم (مثل `userId`) وتاريخ انتهاء صلاحية.
-
-3.  **إرسال التوكن (من الخادم إلى العميل)**:
-    - الخادم يرسل الـ JWT مرة أخرى إلى العميل كجزء من استجابة ناجحة.
-
-4.  **تخزين التوكن (على العميل)**:
-    - الواجهة الأمامية تستقبل الـ JWT وتقوم بتخزينه بشكل آمن. الأماكن الشائعة هي `localStorage` أو `HttpOnly cookies`.
-
-5.  **المصادقة على الطلبات اللاحقة (من العميل إلى الخادم)**:
-    - في كل طلب لاحق يتطلب مصادقة (مثل جلب بيانات الملف الشخصي)، يقوم العميل بإرفاق الـ JWT في ترويسة الطلب (Authorization Header).
-    - مثال: `Authorization: Bearer <your_jwt_here>`
-
-6.  **التحقق من التوكن (على الخادم)**:
-    - مع كل طلب، يقوم الخادم بالتحقق من صحة وتوقيع الـ JWT.
-    - إذا كان التوكن صالحًا، يعرف الخادم من هو المستخدم ويسمح بتنفيذ الطلب.
-
-### لماذا هذا أفضل؟
-
-- **الأمان**: كلمات المرور لا تغادر الخادم أبدًا. المنطق كله يتم في بيئة آمنة.
-- **Stateless (عديم الحالة)**: الخادم لا يحتاج إلى تخزين معلومات الجلسة. كل المعلومات التي يحتاجها للتحقق من المستخدم موجودة داخل الـ JWT.
-- **قابلية التوسع**: يعمل بشكل جيد مع البنى الموزعة (distributed architectures) و microservices.
-
-للحصول على تفاصيل تقنية حول كيفية بناء هذه الواجهات البرمجية، راجع **[دليل تكامل الواجهة الخلفية](./09-backend-integration.md)**.
+By leaning on the storage API and the shared hook, the authentication system stays simple yet fully synchronized across devices accessing the same backend.

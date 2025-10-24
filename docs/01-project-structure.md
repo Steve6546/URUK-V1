@@ -1,69 +1,59 @@
-# 1. هيكل المشروع
+# 01 – Project Structure
 
-لفهم كيفية تنظيم الكود، من المهم معرفة الغرض من كل مجلد وملف في المشروع.
+This document explains how the repository is laid out now that the frontend, backend, and tunnel scripts work together. Use it as your map when navigating or onboarding new contributors.
 
-## نظرة عامة على الهيكل
-
+## Root Layout
 ```
-.
-├── api/                      # (جديد) وحدة الاتصال بالخادم (API Layer)
-├── components/               # مكونات React القابلة لإعادة الاستخدام
-├── data/                     # البيانات الثابتة (مثل قائمة الدول)
-├── docs/                     # ملفات التوثيق التفصيلية (هذا المجلد)
-├── hooks/                    # Hooks مخصصة لـ React
-├── App.tsx                   # المكون الرئيسي للتطبيق
-├── index.html                # ملف HTML الرئيسي
-├── index.tsx                 # نقطة الدخول لتطبيق React
-├── metadata.json             # بيانات وصفية للمشروع
-├── types.ts                  # تعريفات TypeScript
-└── README.md                 # ملف التوثيق الرئيسي
+URUK-V1/
+├── api/                  # Frontend HTTP helpers (fetch + storage client)
+├── components/           # React components (auth, chat, counters, etc.)
+├── data/                 # Static data used by the UI (packages, countries…)
+├── docs/                 # Documentation set (this folder)
+├── hooks/                # Shared React hooks (e.g. useLocalStorage)
+├── scripts/              # PowerShell automation (start/stop services)
+├── server/               # Express backend
+├── src/                  # Legacy Vite structure placeholder (entry in App.tsx)
+├── dist/                 # Vite build output (gitignored)
+├── README.md             # Project overview and quick start
+└── package.json          # Frontend package manifest
 ```
 
-## شرح المجلدات
+## Backend Directory
+```
+server/
+├── controllers/          # REST handlers (storage, test)
+├── data/                 # Persisted storage.json
+├── middleware/           # Express middleware (error handler)
+├── routes/               # Express routers (storage, test)
+├── services/             # Storage service wrapping JSON persistence
+├── .env[.example]        # Backend-specific environment variables
+├── index.js              # Express entry point
+└── package.json          # Backend dependencies and scripts
+```
 
-### `api/` (جديد)
-هذا المجلد هو الخطوة الأولى نحو تحويل التطبيق ليعمل مع خادم حقيقي.
-- **`apiClient.ts`**: هذا الملف سيكون مسؤولاً عن جميع طلبات الشبكة (API calls) إلى الخادم. بدلاً من استدعاء `localStorage` مباشرة في المكونات، سنقوم باستدعاء دوال من هذا الملف (مثل `loginUser`, `fetchCounters`). هذا النهج يسمى "طبقة الخدمة" (Service Layer) وهو يفصل منطق الواجهة عن منطق الاتصال بالخادم، مما يجعل الكود أكثر تنظيمًا وسهولة في الصيانة.
+The backend listens on `PORT` (default `3001`) and exposes routes under `/api/*`. Data is stored in `data/storage.json` as `key: { value, updatedAt }` pairs. Default keys ensure arrays exist out of the box.
 
-### `components/`
-هذا المجلد هو قلب واجهة المستخدم. يحتوي على جميع مكونات React التي تشكل الشاشات والأجزاء المختلفة من التطبيق. كل مكون مسؤول عن جزء معين من الواجهة، مما يجعل الكود منظمًا وسهل الصيانة.
+## Scripts Directory
+```
+scripts/
+├── start-services.ps1    # Starts backend + Cloudflare tunnel, logs output, tracks PIDs
+├── stop-services.ps1     # Stops the recorded processes
+└── runtime-pids.json     # Generated file with active PID metadata (gitignored)
+```
 
-- **`Auth.tsx`**: مسؤول عن واجهة تسجيل الدخول وإنشاء الحساب.
-- **`Header.tsx`**: الشريط العلوي الذي يعرض أرصدة المستخدم.
-- **`MainCounter.tsx`**: الشاشة الرئيسية التي تظهر بعد شراء العداد.
-- **`Store.tsx`**: متجر شراء العدادات.
-- **`Chat.tsx`, `RoomView.tsx`, `CreateRoomModal.tsx`**: مكونات نظام الدردشة.
-- **`icons.tsx`**: ملف مركزي لجميع أيقونات SVG المستخدمة في التطبيق.
+These scripts are optional but recommended on Windows. They centralize the commands shown in the README.
 
-### `data/`
-يحتوي على البيانات الثابتة التي لا تتغير أثناء تشغيل التطبيق.
-- **`countries.ts`**: مصفوفة تحتوي على قائمة الدول ورموز الاتصال الخاصة بها، وتُستخدم في شاشات التسجيل وتوثيق الحساب.
+## Frontend Entry Points
+- `App.tsx` – single-page application containing the main layout, feature sections, and the new connection status badge.
+- `api/apiClient.ts` – wraps `fetch` against the backend with helpers for storage operations and connectivity pings.
+- `hooks/useLocalStorage.ts` – bridge between React state and the backend storage API. It mirrors the old `localStorage` experience while persisting everything remotely.
 
-### `docs/`
-يحتوي على ملفات التوثيق التفصيلية (مثل هذا الملف) التي تشرح كل جانب من جوانب المشروع لمساعدة المطورين الجدد.
+## Documentation Index
+Each markdown file in `/docs` focuses on a specific slice (frontend stack, state management, persistence, authentication, etc.). See the directory README or the navigation list on the repository front page.
 
-### `hooks/`
-يحتوي على "Hooks" مخصصة لـ React. الـ Hooks هي وظائف تسمح لك "بالتعلق" بميزات React.
-- **`useLocalStorage.ts`**: Hook حيوي جدًا في هذا المشروع **حاليًا**. يقوم تلقائيًا بحفظ وتحديث الحالة (State) في `localStorage` بالمتصفح. **عند الانتقال إلى خادم حقيقي، سيتم استبدال استخدامه تدريجيًا.**
-- **`useCountdown.ts`**: Hook لإدارة وعرض العد التنازلي، يُستخدم في عداد الـ 24 ساعة.
+## Logs and Artifacts
+- `server-stdout.log` / `server-stderr.log` – created by the start script. Rotate or clear as needed.
+- `cloudflared.log` – records the current quick-tunnel hostname and tunnel status messages.
+- `dist/` – Vite build artifacts (generated by `npm run build`). Safe to delete.
 
-## شرح الملفات الرئيسية
-
-- **`index.html`**:
-  - **الوظيفة**: الصفحة الأساسية التي يتم تحميلها في المتصفح.
-  - **محتويات**: تحتوي على عنصر `<div id="root"></div>` الذي يعمل كنقطة إدخال لتطبيق React. كما تقوم بتحميل TailwindCSS والخطوط اللازمة.
-
-- **`index.tsx`**:
-  - **الوظيفة**: نقطة البداية لتطبيق React.
-  - **محتويات**: يستخدم `ReactDOM` لربط المكون الرئيسي (`App.tsx`) بـ `index.html`.
-
-- **`App.tsx`**:
-  - **الوظيفة**: المكون الأب الذي يحتوي على كل منطق التطبيق الرئيسي.
-  - **محتويات**:
-    - إدارة الحالة العامة مثل المستخدم المسجل حاليًا، النقاط، الجواهر، الإشعارات، وغرف الدردشة.
-    - منطق التنقل بين الشاشات المختلفة (مثل الشاشة الرئيسية، المتجر، الملف الشخصي، الدردشة).
-    - تعريف الوظائف الرئيسية (مثل `handleBuyCounter`, `handleGiftCounter`, `handleSendMessage`) وتمريرها إلى المكونات الفرعية.
-
-- **`types.ts`**:
-  - **الوظيفة**: ملف مركزي لتعريفات TypeScript.
-  - **محتويات**: يحتوي على `interfaces` مثل `User`, `Counter`, `Notification`, `ChatMessage` التي تصف شكل البيانات في التطبيق. هذا يساعد في منع الأخطاء ويجعل الكود أكثر قابلية للقراءة.
+Understanding this structure will help you move quickly between frontend and backend tasks and locate the right place for new features or documentation updates.

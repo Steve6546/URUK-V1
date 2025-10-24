@@ -1,59 +1,35 @@
-# 10. لوحة الألوان (Color Palette)
+# 10 – Color Palette & Visual Language
 
-هذا المستند يحدد لوحة الألوان الرسمية المستخدمة في تصميم واجهة مستخدم التطبيق لضمان التناسق البصري والهوية المميزة.
+URUK uses a dark, neon-accented palette that supports the premium gaming aesthetic of the app. This reference keeps designers and developers aligned when adding new screens.
 
-## ملخص سريع للألوان
+## Core Palette
 
-| العنصر             | اللون        | الكود Hex | الوصف                                   |
-| ------------------ | ----------- | --------- | --------------------------------------- |
-| الخلفية الرئيسية   | أسود مطفي   | `#0B0B0B` | خلفية داكنة وفخمة تبرز العناصر الأخرى.     |
-| الأزرار والأيقونات | ذهبي مشع    | `#FFC107` | اللون الرئيسي للأزرار والعناصر التفاعلية. |
-| الظلال والإطارات   | ذهبي غامق   | `#A37C00` | يعطي عمقًا للأزرار والإطارات.              |
-| مربعات المعلومات  | بني داكن     | `#2A1D00` | خلفية مربعات الأرصدة (النقاط، الجواهر).   |
-| الأرقام الرئيسية   | أصفر ساطع   | `#FFD54F` | لون الأرقام البارزة لزيادة الوضوح.       |
-| النصوص الثانوية    | رمادي فاتح  | `#BEBEBE` | للنصوص الوصفية والشروحات.               |
-| النصوص الدقيقة     | أبيض نقي    | `#FFFFFF` | للنصوص الصغيرة التي تتطلب وضوحًا عاليًا.  |
+| Token | Hex | Usage |
+| ----- | --- | ----- |
+| `color.background` | `#0B0B0B` | Primary background for pages, panels, and modals. |
+| `color.accent.gold` | `#FFC107` | Primary highlight for buttons, active icons, and key metrics. |
+| `color.accent.goldDark` | `#A37C00` | Hover states and secondary accents that need depth. |
+| `color.accent.goldShadow` | `#2A1D00` | Shadows, overlays, and subtle separators beneath gold elements. |
+| `color.accent.goldLight` | `#FFD54F` | Gradients, glows, or hover states that require a lighter touch. |
+| `color.text.secondary` | `#BEBEBE` | Secondary text, helper copy, and inactive labels. |
+| `color.text.primary` | `#FFFFFF` | Primary text on dark backgrounds. |
 
-## تفاصيل الألوان
+## Gradients & Lighting
+- Combine `color.accent.gold` with `color.accent.goldLight` for button hover transitions.
+- Use `color.accent.goldShadow` sparingly under glowing elements to maintain contrast.
+- Keep gradients subtle; opacity layers (`rgba(255, 193, 7, 0.1)`) work well for hover backgrounds.
 
-### 1. الخلفية
+## Overlays
+- Modal backgrounds often use `rgba(0, 0, 0, 0.6)` plus a blur (`backdrop-blur-sm`) to stay readable.
+- Toasts and badges use translucent backgrounds (e.g. `bg-black/80`) with accent-colored borders.
 
-- **اللون**: أسود مطفي غامق جدًا
-- **الكود**: `#0B0B0B`
-- **الوصف**: أسود فاحم يستخدم كخلفية رئيسية، يعطي إحساس بالفخامة والعتمة.
+## Accessibility Tips
+- Maintain a minimum text contrast ratio of 4.5:1 by pairing `#FFFFFF` text with backgrounds darker than `#1A1A1A`.
+- For smaller text on gold backgrounds, switch text color to `#0B0B0B` for legibility.
+- The connection badge uses green (`#34D399`) and red (`#F87171`) variants internally; reuse those for status feedback if needed.
 
-### 2. اللون الذهبي الفاتح (الأزرار والأيقونات)
+## Assets
+- Icons are SVG-based components under `components/icons.tsx` and inherit color through `currentColor`, so simply wrapping them with the proper class applies the palette.
+- Images for lotteries and banners can be desaturated slightly to avoid clashing with the vibrant gold accents.
 
-- **اللون**: ذهبي مشع
-- **الكود**: `#FFC107`
-- **الوصف**: أصفر ذهبي مائل للبرتقالي، يستخدم للأزرار (تفعيل / متجر العدادات) وللرموز (الجرس، العداد، الحواف).
-
-### 3. اللون الذهبي الغامق (الإطارات والنصوص الثانوية)
-
-- **اللون**: ذهبي غامق
-- **الكود**: `#A37C00`
-- **الوصف**: يستخدم كظل أو حدود خفيفة حول العناصر، يمنح عمقًا للأزرار والدائرة الوسطى.
-
-### 4. اللون البني الغامق (خلفيات الأرصدة)
-
-- **اللون**: بني داكن جدًا
-- **الكود**: `#2A1D00`
-- **الوصف**: لون قريب من الأسود مع لمسة ذهبية بنية، يستخدم كخلفية للمربعات الصغيرة (مجموع الجواهر والنقاط).
-
-### 5. اللون الأصفر الفاتح (النصوص المضيئة داخل الدائرة)
-
-- **اللون**: أصفر ساطع
-- **الكود**: `#FFD54F`
-- **الوصف**: لون مضيء يوحي بالطاقة، يستخدم لكتابة الأرقام الكبيرة مثل (0.00).
-
-### 6. اللون الرمادي الفاتح (النصوص الثانوية)
-
-- **اللون**: رمادي ناعم
-- **الكود**: `#BEBEBE`
-- **الوصف**: لون محايد للنصوص التوضيحية، مثل “الرصيد بالدولار” أو “الرصيد اليومي”.
-
-### 7. اللون الأبيض النقي (بعض النصوص الصغيرة)
-
-- **اللون**: أبيض
-- **الكود**: `#FFFFFF`
-- **الوصف**: يستخدم في النصوص الصغيرة داخل الأزرار أو التفاصيل الدقيقة.
+Stick to these tokens to keep the experience cohesive across new features and documentation screenshots.

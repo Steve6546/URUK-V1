@@ -1,67 +1,56 @@
-# 6. ميزات اللعبة الأساسية
+# 06 – Core Features Overview
 
-هذا المستند يغطي المنطق البرمجي وراء الميزات الأساسية التي تشكل تجربة اللعبة. كل هذا المنطق موجود بشكل أساسي في المكون `App.tsx`.
+URUK combines several subsystems that previously lived only in local state. With the backend included, every feature now persists across sessions and users. This document summarises each area and the storage keys it uses.
 
-## 1. النقاط والمجوهرات (Points & Jewels)
+## Balances & Counters
+- **Dollars / Points / Jewels**: Stored per user as `dollars_<userId>`, `points_<userId>`, `jewels_<userId>`.
+- **Counters owned**: `userCounters_<userId>` stores purchased counters.
+- **Main counter activation**: `activationStartTime_<userId>` tracks cooldowns, and rewards are added to points/jewels automatically.
+- Purchasing a counter or package logs a transaction (see below) and pushes a notification.
 
-- **الوصف**: هما العملتان الرئيسيتان في اللعبة.
-  - **النقاط**: يمكن جمعها يدويًا في البداية، ثم يتم ربحها يوميًا من العدادات. تُستخدم لشراء العدادات الأساسية وتغيير الاسم/الصورة الشخصية.
-  - **المجوهرات**: يتم ربحها يوميًا من العدادات. تُستخدم لشراء العدادات المتقدمة.
-- **التنفيذ**:
-  - يتم تخزينهما في `localStorage` باستخدام `useLocalStorage` لكل مستخدم على حدة.
-  - يتم تحديثهما عبر دوال مثل `setPoints` و `setJewels`.
+## Stores
+- **CounterStore**, **PackagesStore**, **JewelsStore** – let users buy new counters or currency packages.
+- Each purchase calls `setPurchaseHistory`, `setNotifications`, updates balances, and logs the action via `logTransaction`.
 
-## 2. نظام العداد (Counter System)
+## Points Transfer & Gifts
+- **SendPoints**: Sends points between users.
+  - Deducts from sender (`points_<sender>`), credits receiver (`points_<receiver>`).
+  - Injects notifications for both parties (`notifications_<id>`).
+  - Adds transaction entries for auditing (`purchaseHistory_<id>`).
+- **GiftCounter**: Transfers counters between users with similar persistence logic.
 
-هو الميزة المحورية في اللعبة.
+## Lottery
+- `lotteryParticipants` – global array of user IDs.
+- `lotteryPot` – numeric value storing the total pot.
+- `lotteryPrize*` keys – name, description, image of the current prize.
+- `lotteryHistory` – array of past `LotteryResult` objects whenever a draw completes.
 
-### أ. الشراء الأولي
-- **المكونات**: `PointCollector.tsx` و `CounterStore.tsx`.
-- **المنطق**:
-  1. المستخدمون الجدد ليس لديهم عداد (`hasCounter` تكون `false`).
-  2. يرون شاشة `PointCollector` لجمع النقاط بالنقر.
-  3. عند الوصول إلى تكلفة العداد (`COUNTER_COST`)، يمكنهم شراء العداد الأول من `CounterStore`.
-  4. عند الشراء، يتم خصم النقاط وتعيين `hasCounter` إلى `true`.
+## Chat
+- `chatRooms` – array of room objects (`id`, `name`, `type`, `members`, etc.).
+- `chatMessages` – dictionary keyed by room ID mapping to arrays of messages.
+- Joining/leaving rooms emits notifications and updates `members`.
 
-### ب. تفعيل العداد والعد التنازلي
-- **المكون**: `MainCounter.tsx`.
-- **الحالة المسؤولة**: `activationStartTime` (تُخزن في `localStorage`).
-- **المنطق**:
-  1. عندما ينقر المستخدم على "تفعيل"، يتم تسجيل الوقت الحالي في `activationStartTime`.
-  2. طالما أن `activationStartTime` له قيمة، يظهر العد التنازلي.
-  3. يتم استخدام الهوك `useCountdown` لحساب الوقت المتبقي بناءً على `activationStartTime + COOLDOWN_PERIOD`.
-  4. `COOLDOWN_PERIOD` هي مدة ثابتة (24 ساعة).
+## Notifications
+- Global notifications feed per user: `notifications_<userId>` array.
+- Each entry includes `message`, `timestamp`, `category`, and `read` flag.
+- The header badge counts unread items; viewing the panel can mark them as read (depending on UX requirements).
 
-### ج. جمع المكافآت
-- **المنطق**:
-  - في كل مرة يتم فيها إعادة عرض مكون `App.tsx`، يقوم `useEffect` بالتحقق من `activationStartTime`.
-  - إذا مر أكثر من 24 ساعة منذ وقت التفعيل (`Date.now() - activationStartTime >= COOLDOWN_PERIOD`):
-    1. تتم إضافة المكافآت (`jewelRewardPerCycle` و `pointRewardPerCycle`) إلى رصيد المستخدم.
-    2. يتم إرسال إشعار للمستخدم.
-    3. يتم إعادة تعيين `activationStartTime` إلى `null`، مما يسمح بتفعيل العداد مرة أخرى.
+## Transactions & History
+- `purchaseHistory_<userId>` – tracks every purchase, gift, conversion, or lottery event.
+- Each record includes `type`, `description`, `amount`, `currency`, `timestamp`, and `isDebit`.
+- Used by `PurchaseHistory.tsx` to render a timeline.
 
-### د. شراء عدادات إضافية (من المتجر)
-- **المكون**: `Store.tsx`.
-- **المنطق**:
-  1. يعرض المتجر قائمة بالعدادات المتاحة للشراء.
-  2. عند الشراء، يتم خصم السعر (نقاط أو جواهر) من رصيد المستخدم.
-  3. يتم إضافة العداد الجديد إلى مصفوفة `userCounters` الخاصة بالمستخدم.
-  4. المكافأة اليومية الإجمالية (`jewelRewardPerCycle` و `pointRewardPerCycle`) هي مجموع مكافآت **كل** العدادات التي يمتلكها المستخدم. يتم حسابها ديناميكيًا باستخدام `Array.reduce()` على مصفوفة `userCounters`.
+## Account Profile
+- `profileName_<userId>`, `profileEmail_<userId>`, `profilePhone_<userId>`.
+- `profilePicture_<userId>` and `profileBanner_<userId>` for media URLs.
+- Change counters enforce cost after exceeding free edits.
 
-## 3. إهداء العدادات (Gifting)
+## Notifications & Connection UX
+- Header includes `Connected ✅ / Disconnected ❌` badge based on `/api/test`.
+- Toasts surface whenever connectivity flips, ensuring users know when actions may fail.
 
-- **المكون**: `GiftCounter.tsx`.
-- **المنطق**:
-  1. **البحث**: يبحث المُهدي عن مستخدم آخر باستخدام `userId`. يتم البحث في قائمة `allUsers` المخزنة.
-  2. **الاختيار والشراء**: يختار المُهدي عدادًا من قائمة الهدايا.
-  3. **التحقق من الرصيد**: يتم التحقق مما إذا كان المُهدي يمتلك نقاطًا أو جواهر كافية.
-  4. **تنفيذ الهدية (`handleGiftCounter`)**:
-     - يتم خصم التكلفة من رصيد المُهدي.
-     - **الأهم**: يتم تعديل `localStorage` **مباشرة** للمستلم.
-       - يتم جلب عدادات المستلم (`userCounters_<recipientId>`) من `localStorage`.
-       - تتم إضافة العداد الجديد إلى القائمة.
-       - يتم حفظ القائمة المحدثة مرة أخرى في `localStorage` الخاص بالمستلم.
-     - يتم إضافة إشعار إلى قائمة إشعارات المستلم (`notifications_<recipientId>`) في `localStorage`.
-     - يتم إضافة إشعار تأكيد إلى قائمة إشعارات المُهدي.
+## Error Tolerance
+- The storage service guarantees each key returns `{ value, updatedAt }`, avoiding crashes from `404` responses.
+- Hooks log failures to the console but keep rendering stable; repeated retries happen as long as the backend is reachable.
 
-هذا النهج (التعديل المباشر لبيانات مستخدم آخر في `localStorage`) ممكن فقط لأن التطبيق يعمل بالكامل من جانب العميل. في تطبيق حقيقي، سيتم هذا عبر طلب API إلى الخادم.
+Understanding which keys power each feature makes debugging easy—watch the REST calls or inspect `storage.json` while interacting with the relevant screen.
