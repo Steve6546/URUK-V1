@@ -76,13 +76,20 @@ export async function getStorageValue<T>(
   defaultValue: T
 ): Promise<T> {
   try {
-    const entry = await request<StorageEntry<T>>(
+    const entry = await request<StorageEntry<T> | T>(
       `/storage/${encodeURIComponent(key)}`
     );
-    if (entry && typeof entry.value !== 'undefined') {
-      return entry.value;
+    if (entry === null || typeof entry === 'undefined') {
+      return defaultValue;
     }
-    return defaultValue;
+    if (typeof entry === 'object' && 'value' in entry) {
+      const wrapped = entry as StorageEntry<T>;
+      if (typeof wrapped.value !== 'undefined' && wrapped.value !== null) {
+        return wrapped.value;
+      }
+      return defaultValue;
+    }
+    return entry as T;
   } catch (error) {
     if (error instanceof HttpError && error.status === 404) {
       return defaultValue;

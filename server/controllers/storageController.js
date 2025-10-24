@@ -4,9 +4,6 @@ const getValue = async (req, res, next) => {
   try {
     const { key } = req.params;
     const entry = await storageService.getValue(key);
-    if (typeof entry === 'undefined') {
-      return res.status(404).json({ error: 'Key not found' });
-    }
     return res.json(entry);
   } catch (error) {
     return next(error);
@@ -20,7 +17,7 @@ const setValue = async (req, res, next) => {
       return res.status(400).json({ error: 'Missing value in request body' });
     }
     const entry = await storageService.setValue(key, req.body.value);
-    return res.status(201).json(entry);
+    return res.json(entry);
   } catch (error) {
     return next(error);
   }
@@ -29,10 +26,7 @@ const setValue = async (req, res, next) => {
 const deleteValue = async (req, res, next) => {
   try {
     const { key } = req.params;
-    const deleted = await storageService.deleteValue(key);
-    if (!deleted) {
-      return res.status(404).json({ error: 'Key not found' });
-    }
+    await storageService.deleteValue(key);
     return res.status(204).send();
   } catch (error) {
     return next(error);

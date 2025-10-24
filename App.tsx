@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import Header from './components/Header';
 import CounterStore from './components/CounterStore';
@@ -22,7 +22,7 @@ import JewelsStore from './components/JewelsStore';
 import PurchaseHistory from './components/PurchaseHistory';
 import { Counter, Notification, User, ChatRoom, ChatMessage, LotteryResult, Transaction } from './types';
 import { UserIcon, UsersIcon, ArrowLeftIcon, ArrowRightIcon, CameraIcon, PencilIcon, PhoneIcon, MailIcon, ReferralIcon, CheckIcon, LockIcon, ShieldCheckIcon, DocumentIcon, BellIcon, HeadsetIcon, ExitIcon, LogoutIcon, IdIcon, XIcon, ShieldExclamationIcon, ClockIcon, GamesIcon, WithdrawIcon, ChatIcon, CopyIcon } from './components/icons';
-import { getStorageValue, setStorageValue } from './api/apiClient';
+import { getStorageValue, setStorageValue, pingApi } from './api/apiClient';
 
 const COUNTER_COST = 1000;
 const COOLDOWN_PERIOD = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
@@ -59,6 +59,11 @@ const lotteryPrizes = [
 const App: React.FC = () => {
     const [currentUser, setCurrentUser] = useLocalStorage<User | null>('currentUser', null);
     const [allUsers, setAllUsers] = useLocalStorage<User[]>('users', []);
+    const [isConnected, setIsConnected] = useState(true);
+    const [connectionToastMessage, setConnectionToastMessage] = useState<string | null>(null);
+    const [connectionToastVariant, setConnectionToastVariant] = useState<'online' | 'offline'>('online');
+    const connectionToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastConnectionStatusRef = useRef(true);
 
     // Per-user data keys now based on the unique userId
     const userDataKey = (key: string) => currentUser ? `${key}_${currentUser.userId}` : key;
@@ -72,6 +77,17 @@ const App: React.FC = () => {
     const [userCounters, setUserCounters] = useLocalStorage<Counter[]>(userDataKey('userCounters'), []);
     const [notifications, setNotifications] = useLocalStorage<Notification[]>(userDataKey('notifications'), []);
     const [purchaseHistory, setPurchaseHistory] = useLocalStorage<Transaction[]>(userDataKey('purchaseHistory'), []);
+    const scheduleConnectionToast = useCallback((message: string, variant: 'online' | 'offline') => {
+        setConnectionToastMessage(message);
+        setConnectionToastVariant(variant);
+        if (connectionToastTimerRef.current) {
+            window.clearTimeout(connectionToastTimerRef.current);
+        }
+        connectionToastTimerRef.current = window.setTimeout(() => {
+            setConnectionToastMessage(null);
+            connectionToastTimerRef.current = null;
+        }, 4000);
+    }, []);
     
     // Profile State
     const [profileName, setProfileName] = useLocalStorage<string>(userDataKey('profileName'), 'Moody Hey');
@@ -79,6 +95,39 @@ const App: React.FC = () => {
     const [profileBanner, setProfileBanner] = useLocalStorage<string | null>(userDataKey('profileBanner'), null);
     const [profileEmail, setProfileEmail] = useLocalStorage<string>(userDataKey('profileEmail'), 'heymoody785@gmail.com');
     const [profilePhone, setProfilePhone] = useLocalStorage<string>(userDataKey('profilePhone'), 'غير متوفر');
+
+    useEffect(() => {
+        let isMounted = true;
+
+        const checkConnection = async () => {
+            const ok = await pingApi();
+            if (!isMounted) {
+                return;
+            }
+            setIsConnected(ok);
+            if (ok !== lastConnectionStatusRef.current) {
+                scheduleConnectionToast(
+                    ok ? 'Connection restored.' : 'Connection lost. Retrying...',
+                    ok ? 'online' : 'offline'
+                );
+                lastConnectionStatusRef.current = ok;
+            }
+        };
+
+        void checkConnection();
+        const intervalId = window.setInterval(() => {
+            void checkConnection();
+        }, 7000);
+
+        return () => {
+            isMounted = false;
+            window.clearInterval(intervalId);
+            if (connectionToastTimerRef.current) {
+                window.clearTimeout(connectionToastTimerRef.current);
+                connectionToastTimerRef.current = null;
+            }
+        };
+    }, [scheduleConnectionToast]);
 
 
     const [showStore, setShowStore] = useState(false);
@@ -1793,30 +1842,46 @@ const App: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center p-4 selection:bg-[#FFC107]/40">
-            {showNotificationsPanel && (
-                <NotificationsPanel 
-                    notifications={notifications}
-                    onClose={handleToggleNotifications}
-                />
+        <>
+            {connectionToastMessage && (
+                <div className="fixed top-4 right-4 z-50">
+                    <div
+                        className={`bg-black/80 border px-4 py-2 rounded-xl text-sm shadow-lg backdrop-blur-sm ${
+                            connectionToastVariant === 'online'
+                                ? 'border-green-400/70 text-green-200'
+                                : 'border-red-400/70 text-red-200'
+                        }`}
+                    >
+                        {connectionToastMessage}
+                    </div>
+                </div>
             )}
-            {logoutConfirmModal}
-            <div className="w-full max-w-md mx-auto">
-                {!showStore && !showGiftCounterScreen && !showSendPointsScreen && !showPackagesStore && (
-                    <Header 
-                        dollars={dollars} 
-                        points={points} 
-                        jewels={jewels}
-                        onToggleNotifications={handleToggleNotifications}
-                        unreadCount={unreadCount}
-                        onMenuClick={handleMenuClick}
+            <div className="min-h-screen flex flex-col items-center justify-center p-4 selection:bg-[#FFC107]/40">
+                {showNotificationsPanel && (
+                    <NotificationsPanel 
+                        notifications={notifications}
+                        onClose={handleToggleNotifications}
                     />
                 )}
-                <main className={showStore || showPackagesStore || showGiftCounterScreen || showSendPointsScreen ? '' : 'mt-4'}>
-                    {renderContent()}
-                </main>
+                {logoutConfirmModal}
+                <div className="w-full max-w-md mx-auto">
+                    {!showStore && !showGiftCounterScreen && !showSendPointsScreen && !showPackagesStore && (
+                        <Header 
+                            dollars={dollars} 
+                            points={points} 
+                            jewels={jewels}
+                            onToggleNotifications={handleToggleNotifications}
+                            unreadCount={unreadCount}
+                            onMenuClick={handleMenuClick}
+                            isConnected={isConnected}
+                        />
+                    )}
+                    <main className={showStore || showPackagesStore || showGiftCounterScreen || showSendPointsScreen ? '' : 'mt-4'}>
+                        {renderContent()}
+                    </main>
+                </div>
             </div>
-        </div>
+        </>
     );
 };
 

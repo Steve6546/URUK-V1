@@ -8,6 +8,7 @@ interface HeaderProps {
     onToggleNotifications: () => void;
     unreadCount: number;
     onMenuClick: () => void;
+    isConnected: boolean;
 }
 
 const StatCard: React.FC<{ icon: React.ReactNode; label: string; value: number; }> = ({ icon, label, value }) => (
@@ -23,9 +24,26 @@ const StatCard: React.FC<{ icon: React.ReactNode; label: string; value: number; 
 );
 
 
-const Header: React.FC<HeaderProps> = ({ dollars, points, jewels, onToggleNotifications, unreadCount, onMenuClick }) => {
+const Header: React.FC<HeaderProps> = ({ dollars, points, jewels, onToggleNotifications, unreadCount, onMenuClick, isConnected }) => {
     return (
         <div className="w-full flex flex-col items-center gap-3">
+            <div className="w-full flex justify-end">
+                <span
+                    className={`flex items-center gap-2 text-sm font-semibold px-3 py-1 rounded-lg border backdrop-blur-sm ${
+                        isConnected
+                            ? 'text-green-200 border-green-400/60 bg-green-500/10'
+                            : 'text-red-200 border-red-400/60 bg-red-500/10'
+                    }`}
+                    aria-live="polite"
+                >
+                    <span
+                        className={`w-2 h-2 rounded-full ${
+                            isConnected ? 'bg-green-400 animate-pulse' : 'bg-red-400'
+                        }`}
+                    />
+                    {isConnected ? 'Connected ✅' : 'Disconnected ❌'}
+                </span>
+            </div>
              <div className="w-full relative flex justify-center items-center">
                 <button 
                     onClick={onToggleNotifications} 

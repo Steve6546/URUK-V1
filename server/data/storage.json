@@ -1,10 +1,40 @@
 {
-  "users": [],
-  "notifications": [],
-  "lotteryParticipants": [],
-  "chatMessages": [],
-  "chatRooms": [],
-  "userCounters": [],
-  "purchaseHistory": [],
-  "lotteryHistory": []
+  "users": {
+    "value": [],
+    "updatedAt": "2025-10-24T14:49:54.611Z"
+  },
+  "notifications": {
+    "value": [],
+    "updatedAt": "2025-10-24T14:49:54.611Z"
+  },
+  "lotteryParticipants": {
+    "value": [],
+    "updatedAt": "2025-10-24T14:49:54.611Z"
+  },
+  "chatMessages": {
+    "value": [],
+    "updatedAt": "2025-10-24T14:49:54.611Z"
+  },
+  "chatRooms": {
+    "value": [],
+    "updatedAt": "2025-10-24T14:49:54.611Z"
+  },
+  "userCounters": {
+    "value": [],
+    "updatedAt": "2025-10-24T14:49:54.611Z"
+  },
+  "purchaseHistory": {
+    "value": [],
+    "updatedAt": "2025-10-24T14:49:54.611Z"
+  },
+  "lotteryHistory": {
+    "value": [],
+    "updatedAt": "2025-10-24T14:49:54.611Z"
+  },
+  "testKey": {
+    "value": {
+      "foo": "bar"
+    },
+    "updatedAt": "2025-10-24T14:49:54.612Z"
+  }
 }
