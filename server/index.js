@@ -95,6 +95,14 @@ app.get('/', (req, res) => {
   });
 });
 
+app.get('/api/test', (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'Backend is running successfully 🚀',
+    origin: req.headers.origin || 'unknown',
+  });
+});
+
 app.use('/api', routes);
 
 app.use((req, res) => {
