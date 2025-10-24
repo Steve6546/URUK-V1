@@ -27,6 +27,18 @@ const defaultHeaders = {
   'Content-Type': 'application/json',
 };
 
+export class HttpError extends Error {
+  status: number;
+  payload?: unknown;
+
+  constructor(status: number, message: string, payload?: unknown) {
+    super(message);
+    this.status = status;
+    this.payload = payload;
+    Object.setPrototypeOf(this, HttpError.prototype);
+  }
+}
+
 async function request<TResponse = unknown, TBody = unknown>(
   path: string,
   options: RequestOptions<TBody> = {}
@@ -53,7 +65,7 @@ async function request<TResponse = unknown, TBody = unknown>(
     const errorMessage =
       (data && (data.error || data.message)) ||
       `Request failed with status ${response.status}`;
-    throw new Error(errorMessage);
+    throw new HttpError(response.status, errorMessage, data);
   }
 
   return data as TResponse;
@@ -72,7 +84,7 @@ export async function getStorageValue<T>(
     }
     return defaultValue;
   } catch (error) {
-    if (error instanceof Error && error.message.includes('404')) {
+    if (error instanceof HttpError && error.status === 404) {
       return defaultValue;
     }
     console.error(`Failed to retrieve storage key ${key}:`, error);

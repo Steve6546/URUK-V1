@@ -12,7 +12,12 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:5173',
+  'https://*.trycloudflare.com',
+  'https://*.cfargotunnel.com',
 ];
+
+const escapeRegExp = (value) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const parseOrigins = (originsEnv) => {
   if (!originsEnv) {
@@ -24,7 +29,22 @@ const parseOrigins = (originsEnv) => {
     .filter(Boolean);
 };
 
+const buildOriginMatchers = (origins) =>
+  origins.map((pattern) => {
+    if (pattern === '*') {
+      return () => true;
+    }
+    if (pattern.includes('*')) {
+      const regex = new RegExp(
+        `^${pattern.split('*').map(escapeRegExp).join('.*')}$`
+      );
+      return (origin) => regex.test(origin);
+    }
+    return (origin) => origin === pattern;
+  });
+
 const allowedOrigins = parseOrigins(process.env.CORS_ALLOWED_ORIGINS);
+const allowedOriginMatchers = buildOriginMatchers(allowedOrigins);
 
 app.use(
   cors({
@@ -32,7 +52,15 @@ app.use(
       if (!origin) {
         return callback(null, true);
       }
-      if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+      if (
+        allowedOriginMatchers.some((matcher) => {
+          try {
+            return matcher(origin);
+          } catch (err) {
+            return false;
+          }
+        })
+      ) {
         return callback(null, true);
       }
       return callback(
