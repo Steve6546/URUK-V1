@@ -1,7 +1,14 @@
 {
   "users": {
-    "value": [],
-    "updatedAt": "2025-10-24T14:49:54.611Z"
+    "value": [
+      {
+        "userId": "10001",
+        "isVerified": true,
+        "name": "Test User",
+        "hashedPassword": "abc123"
+      }
+    ],
+    "updatedAt": "2025-10-24T14:52:30.890Z"
   },
   "notifications": {
     "value": [],
@@ -16,8 +23,18 @@
     "updatedAt": "2025-10-24T14:49:54.611Z"
   },
   "chatRooms": {
-    "value": [],
-    "updatedAt": "2025-10-24T14:49:54.611Z"
+    "value": [
+      {
+        "creatorId": "10001",
+        "members": [
+          "10001"
+        ],
+        "name": "Lobby",
+        "id": "room-1",
+        "type": "public"
+      }
+    ],
+    "updatedAt": "2025-10-24T14:52:43.959Z"
   },
   "userCounters": {
     "value": [],
@@ -36,5 +53,23 @@
       "foo": "bar"
     },
     "updatedAt": "2025-10-24T14:49:54.612Z"
+  },
+  "notifications_10001": {
+    "value": [
+      {
+        "message": "Test notification",
+        "timestamp": 1761317577520,
+        "read": false,
+        "id": "notif-1",
+        "category": "general"
+      }
+    ],
+    "updatedAt": "2025-10-24T14:52:57.665Z"
+  },
+  "testTunnel": {
+    "value": {
+      "ping": "tunnel"
+    },
+    "updatedAt": "2025-10-24T14:54:15.321Z"
   }
 }
