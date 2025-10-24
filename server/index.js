@@ -12,6 +12,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:5173',
+  'https://uruk-v1-three.vercel.app',
   'https://*.trycloudflare.com',
   'https://*.cfargotunnel.com',
 ];
@@ -45,31 +46,43 @@ const buildOriginMatchers = (origins) =>
 
 const allowedOrigins = parseOrigins(process.env.CORS_ALLOWED_ORIGINS);
 const allowedOriginMatchers = buildOriginMatchers(allowedOrigins);
+const ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
+const ALLOWED_HEADERS = ['Content-Type', 'Authorization'];
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) {
-        return callback(null, true);
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) {
+      return callback(null, true);
+    }
+    const isAllowed = allowedOriginMatchers.some((matcher) => {
+      try {
+        return matcher(origin);
+      } catch (err) {
+        return false;
       }
-      if (
-        allowedOriginMatchers.some((matcher) => {
-          try {
-            return matcher(origin);
-          } catch (err) {
-            return false;
-          }
-        })
-      ) {
-        return callback(null, true);
-      }
-      return callback(
-        new Error(`Origin ${origin} not allowed by CORS configuration`)
-      );
-    },
-    credentials: true,
-  })
-);
+    });
+    if (isAllowed) {
+      return callback(null, true);
+    }
+    // eslint-disable-next-line no-console
+    console.warn(`Blocked CORS request from disallowed origin: ${origin}`);
+    return callback(
+      new Error(`Origin ${origin} not allowed by CORS configuration`)
+    );
+  },
+  methods: ALLOWED_METHODS,
+  allowedHeaders: ALLOWED_HEADERS,
+  credentials: true,
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Methods', ALLOWED_METHODS.join(', '));
+  res.header('Access-Control-Allow-Headers', ALLOWED_HEADERS.join(', '));
+  next();
+});
 
 app.use(express.json({ limit: '5mb' }));
 app.use(morgan('dev'));
