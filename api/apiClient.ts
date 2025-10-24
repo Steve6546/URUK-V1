@@ -3,11 +3,19 @@
  * All network calls should go through these helper functions.
  */
 
-const API_BASE_URL =
-  (typeof import.meta !== 'undefined' &&
-    import.meta.env &&
-    import.meta.env.VITE_API_BASE_URL) ||
-  'http://localhost:3001/api';
+const resolveApiBaseUrl = () => {
+  const rawEnv =
+    typeof import.meta !== 'undefined' && import.meta.env
+      ? import.meta.env.VITE_API_URL
+      : undefined;
+  if (rawEnv && rawEnv.trim()) {
+    const sanitized = rawEnv.trim().replace(/\/$/, '');
+    return sanitized.endsWith('/api') ? sanitized : `${sanitized}/api`;
+  }
+  return 'http://localhost:3001/api';
+};
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
