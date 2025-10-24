@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
+const http = require('http');
 
 const routes = require('./routes');
 const errorHandler = require('./middleware/errorHandler');
@@ -79,6 +80,15 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    // eslint-disable-next-line no-console
+    console.info(
+      `[CORS] Preflight ${req.headers.origin || 'unknown'} -> ${req.originalUrl}`
+    );
+  }
+  next();
+});
+app.use((req, res, next) => {
   res.header('Access-Control-Allow-Methods', ALLOWED_METHODS.join(', '));
   res.header('Access-Control-Allow-Headers', ALLOWED_HEADERS.join(', '));
   next();
@@ -116,4 +126,18 @@ const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`Server listening on port ${PORT}`);
+  const healthCheckUrl = `http://127.0.0.1:${PORT}/api/test`;
+  setTimeout(() => {
+    http
+      .get(healthCheckUrl, (response) => {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[HealthCheck] ${healthCheckUrl} -> ${response.statusCode}`
+        );
+      })
+      .on('error', (err) => {
+        // eslint-disable-next-line no-console
+        console.error('[HealthCheck] Failed', err.message);
+      });
+  }, 1500);
 });

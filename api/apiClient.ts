@@ -12,7 +12,7 @@ const resolveApiBaseUrl = () => {
     const sanitized = rawEnv.trim().replace(/\/$/, '');
     return sanitized.endsWith('/api') ? sanitized : `${sanitized}/api`;
   }
-  return 'http://localhost:3001/api';
+  return '/api';
 };
 
 const API_BASE_URL = resolveApiBaseUrl();
